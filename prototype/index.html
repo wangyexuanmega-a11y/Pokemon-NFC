@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NFC Buddy — Concept Prototype</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader"></div>
+  <p>Initializing</p>
+</div>
+
+<div id="scene-container"></div>
+
+<div id="nfc-flash"></div>
+
+<div id="ui-overlay">
+  <div id="top-bar">
+    <div class="logo">
+      <span class="logo-icon">◇</span>
+      <span class="logo-text">NFC Buddy</span>
+    </div>
+    <div class="status">PROTOTYPE</div>
+  </div>
+
+  <div id="tap-prompt">
+    <div class="nfc-ring">
+      <div class="nfc-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 8a5 5 0 0 1 10 0"/>
+          <path d="M9 11a3 3 0 0 1 6 0"/>
+          <circle cx="12" cy="15" r="1.5" fill="#00d4ff" stroke="none"/>
+        </svg>
+      </div>
+    </div>
+    <h2>Tap Your Phone</h2>
+    <p>NFC awakens your buddy</p>
+    <div class="prompt-cue">
+      <div class="arrow"></div>
+      <span>Tap anywhere</span>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="feature-badge">
+      <span class="dot on"></span>
+      NFC Connected
+    </div>
+    <div class="feature-badge">
+      <span class="dot on"></span>
+      Mosquito Repellent Active
+    </div>
+  </div>
+
+  <div id="creature-info">
+    <div class="info-card">
+      <div class="creature-avatar">✦</div>
+      <div class="creature-details">
+        <div class="creature-name">Sprout</div>
+        <div class="creature-type">NFC Buddy — Light Type</div>
+        <div class="creature-tags">
+          <span>✦ Playful</span>
+          <span>✦ Loyal</span>
+        </div>
+      </div>
+      <button class="creature-interact" id="pet-btn" title="Pet your buddy">❤</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
