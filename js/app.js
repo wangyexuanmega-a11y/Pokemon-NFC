@@ -130,11 +130,8 @@ function onResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
-  const isMobile = w < 480;
-  baseZ = isMobile ? 6.5 : 5.5;
-  camera.position.z = baseZ / currentZoom;
-  camera.position.y = isMobile ? 1.5 : 1.2;
-  camera.lookAt(0, 0.2, 0);
+  baseZ = w < 480 ? 6.5 : 5.5;
+  applyZoom();
 }
 window.addEventListener('resize', onResize);
 
@@ -142,7 +139,7 @@ window.addEventListener('resize', onResize);
 let currentZoom = 1;
 let baseZ = 5.5;
 const MIN_ZOOM = 0.3;
-const MAX_ZOOM = 3.0;
+const MAX_ZOOM = 6.0;
 
 const zoomInBtn = document.getElementById('zoom-in');
 const zoomOutBtn = document.getElementById('zoom-out');
@@ -150,7 +147,11 @@ const zoomIndicator = document.querySelector('.zoom-indicator');
 
 function applyZoom() {
   currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom));
+  var isM = container.clientWidth < 480;
+  var baseY = isM ? 1.5 : 1.2;
   camera.position.z = baseZ / currentZoom;
+  camera.position.y = baseY + Math.log(currentZoom) * 0.2;
+  camera.lookAt(0, 0.2 - (currentZoom - 1) * 0.06, 0);
   if (zoomIndicator) {
     zoomIndicator.textContent = currentZoom.toFixed(1) + 'x';
   }
