@@ -196,6 +196,7 @@ const petBtn = document.getElementById('pet-btn');
 
 function handleTap() {
   if (state.awakened) return;
+  if (!creature) return;
   state.awakened = true;
   nfcFlash.classList.add('active');
   setTimeout(() => nfcFlash.classList.remove('active'), 400);
@@ -295,14 +296,24 @@ function init() {
     loadGLTF(CREATURE_CONFIG.url).then(m => {
       creature = m;
       animTargets = creature.userData.animTargets || {};
-      creature.scale.set(0.001, 0.001, 0.001);
+      if (!state.awakened) {
+        creature.scale.set(0.001, 0.001, 0.001);
+      }
       scene.add(creature);
+      if (state.awakened) {
+        revealCreature();
+      }
     }).catch(e => {
       console.warn('glTF load failed, using Sprout:', e);
       creature = buildSprout();
       animTargets = creature.userData.animTargets || {};
-      creature.scale.set(0.001, 0.001, 0.001);
+      if (!state.awakened) {
+        creature.scale.set(0.001, 0.001, 0.001);
+      }
       scene.add(creature);
+      if (state.awakened) {
+        revealCreature();
+      }
     });
   } else {
     creature = buildSprout();
