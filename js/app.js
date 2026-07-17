@@ -129,11 +129,65 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   const isMobile = w < 480;
-  camera.position.z = isMobile ? 6.5 : 5.5;
+  baseZ = isMobile ? 6.5 : 5.5;
+  camera.position.z = baseZ / currentZoom;
   camera.position.y = isMobile ? 1.5 : 1.2;
   camera.lookAt(0, 0.2, 0);
 }
 window.addEventListener('resize', onResize);
+
+/* ─── Zoom Controls ─── */
+let currentZoom = 1;
+let baseZ = 5.5;
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 3.0;
+
+const zoomInBtn = document.getElementById('zoom-in');
+const zoomOutBtn = document.getElementById('zoom-out');
+const zoomIndicator = document.querySelector('.zoom-indicator');
+
+function applyZoom() {
+  currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom));
+  camera.position.z = baseZ / currentZoom;
+  if (zoomIndicator) {
+    zoomIndicator.textContent = currentZoom.toFixed(1) + 'x';
+  }
+}
+
+function updateZoom(delta) {
+  currentZoom *= (1 + delta);
+  applyZoom();
+}
+
+zoomInBtn.addEventListener('click', () => updateZoom(0.15));
+zoomOutBtn.addEventListener('click', () => updateZoom(-0.15));
+
+container.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  updateZoom(e.deltaY > 0 ? -0.05 : 0.05);
+}, { passive: false });
+
+/* Pinch-to-zoom for mobile */
+let lastPinchDist = 0;
+container.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    lastPinchDist = Math.sqrt(dx*dx + dy*dy);
+  }
+}, { passive: true });
+
+container.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const delta = (dist - lastPinchDist) / 200;
+    updateZoom(delta);
+    lastPinchDist = dist;
+  }
+}, { passive: false });
 
 const tapPrompt = document.getElementById('tap-prompt');
 const creatureInfo = document.getElementById('creature-info');

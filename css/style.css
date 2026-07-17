@@ -379,6 +379,63 @@ html, body {
   .prompt-cue { display: none; }
 }
 
+#zoom-controls {
+  position: fixed;
+  right: 16px;
+  bottom: 120px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+#zoom-controls button {
+  pointer-events: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#zoom-controls button:hover {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: var(--accent-cyan);
+}
+#zoom-controls button:active {
+  transform: scale(0.9);
+}
+.zoom-indicator {
+  pointer-events: none;
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  padding: 2px 0;
+  min-width: 36px;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  #zoom-controls { right: 10px; bottom: 100px; }
+  #zoom-controls button { width: 30px; height: 30px; font-size: 15px; }
+  .zoom-indicator { font-size: 10px; min-width: 30px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #zoom-controls { bottom: 16px; }
+}
+
 #nfc-flash {
   position: fixed;
   inset: 0;
