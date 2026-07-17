@@ -205,19 +205,20 @@ function handleTap() {
 }
 
 function revealCreature() {
+  const finalScale = creature.userData.finalScale || 1;
   const duration = 1200;
   const start = performance.now();
   function step(now) {
     const t = Math.min((now - start) / duration, 1);
     const ease = 1 - Math.pow(1 - t, 3) + Math.sin(t * Math.PI * 3.5) * (1 - t) * 0.15;
     const s = Math.max(ease, 0.001);
-    creature.scale.set(s, s, s);
+    creature.scale.set(s * finalScale, s * finalScale, s * finalScale);
     creature.position.y = (1 - t) * 2;
     creature.rotation.y = t * Math.PI * 2;
     if (t < 1) {
       requestAnimationFrame(step);
     } else {
-      creature.scale.set(1, 1, 1);
+      creature.scale.set(finalScale, finalScale, finalScale);
       creature.position.y = 0;
       creature.rotation.y = 0;
       setTimeout(() => creatureInfo.classList.add('visible'), 400);

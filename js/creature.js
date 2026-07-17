@@ -199,6 +199,7 @@ export function loadGLTF(url) {
       });
       model.userData.type = 'gltf';
       model.userData.animTargets = {};
+      model.userData.finalScale = 0.003;
       resolve(model);
     }, undefined, (err) => reject(err));
   });
