@@ -199,7 +199,8 @@ let dragStartY = 0;
 let panStartX = 0;
 let panStartY = 0;
 
-container.addEventListener('mousedown', (e) => {
+document.addEventListener('mousedown', (e) => {
+  if (e.target.closest('#zoom-controls, #pet-btn, #top-bar, #bottom-bar, #creature-info')) return;
   isDragging = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
@@ -213,8 +214,8 @@ document.addEventListener('mousemove', (e) => {
 });
 document.addEventListener('mouseup', () => { isDragging = false; });
 
-container.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 1) {
+document.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1 && !e.target.closest('#zoom-controls, #pet-btn, #top-bar, #bottom-bar, #creature-info')) {
     isDragging = true;
     dragStartX = e.touches[0].clientX;
     dragStartY = e.touches[0].clientY;
@@ -229,12 +230,15 @@ container.addEventListener('touchmove', (e) => {
 }, { passive: true });
 container.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
 
-document.getElementById('reset-view').addEventListener('click', () => {
-  currentZoom = 1;
-  panOffsetX = 0;
-  panOffsetY = 0;
-  applyZoom();
-});
+var resetBtn = document.getElementById('reset-view') || document.querySelector('#zoom-controls button:last-child');
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    currentZoom = 1;
+    panOffsetX = 0;
+    panOffsetY = 0;
+    applyZoom();
+  });
+}
 
 const creatureInfo = document.getElementById('creature-info');
 const nfcFlash = document.getElementById('nfc-flash');
