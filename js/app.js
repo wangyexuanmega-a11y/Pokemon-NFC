@@ -426,7 +426,6 @@ function animate() {
   }
   particles.geometry.attributes.position.needsUpdate = true;
   ring.material.opacity = 0.08 + Math.sin(time * 0.8) * 0.04;
-  platformGroup.scale.setScalar(1 / Math.max(currentZoom, 0.3));
   renderer.render(scene, camera);
 }
 
