@@ -2,7 +2,7 @@
  *   A: { type: 'sprout' }               ← Primitive Sprout (default)
  *   B: { type: 'gltf', url: '...' }     ← glTF/GLB model
  */
-const CREATURE_CONFIG = { type: 'sprout' };
+const CREATURE_CONFIG = { type: 'gltf', url: 'models/pikachu.glb' };
 /* ────────────────────── */
 
 import * as THREE from 'three';
