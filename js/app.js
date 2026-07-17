@@ -55,6 +55,7 @@ const rimLight2 = new THREE.DirectionalLight(0xff66aa, 0.3);
 rimLight2.position.set(-2, 3, -4);
 scene.add(rimLight2);
 
+const platformGroup = new THREE.Group();
 const groundGeom = new THREE.CircleGeometry(4, 48);
 const groundMat = new THREE.MeshStandardMaterial({
   color: 0x12122a, roughness: 0.9, metalness: 0.1,
@@ -64,7 +65,7 @@ const ground = new THREE.Mesh(groundGeom, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -1.2;
 ground.receiveShadow = true;
-scene.add(ground);
+platformGroup.add(ground);
 const ringMat = new THREE.MeshBasicMaterial({
   color: 0x00d4ff, transparent: true, opacity: 0.12,
   side: THREE.DoubleSide, depthWrite: false,
@@ -72,7 +73,7 @@ const ringMat = new THREE.MeshBasicMaterial({
 const ring = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.7, 64), ringMat);
 ring.rotation.x = -Math.PI / 2;
 ring.position.y = -1.15;
-scene.add(ring);
+platformGroup.add(ring);
 const ringMat2 = new THREE.MeshBasicMaterial({
   color: 0x00d4ff, transparent: true, opacity: 0.06,
   side: THREE.DoubleSide, depthWrite: false,
@@ -80,7 +81,7 @@ const ringMat2 = new THREE.MeshBasicMaterial({
 const ring2 = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.1, 64), ringMat2);
 ring2.rotation.x = -Math.PI / 2;
 ring2.position.y = -1.14;
-scene.add(ring2);
+platformGroup.add(ring2);
 
 const bounceMat = new THREE.MeshStandardMaterial({
   color: 0x00d4ff, roughness: 0.2, metalness: 0.3,
@@ -90,7 +91,8 @@ const bounceMat = new THREE.MeshStandardMaterial({
 const bouncePad = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.06, 32), bounceMat);
 bouncePad.position.y = -1.2;
 bouncePad.receiveShadow = true;
-scene.add(bouncePad);
+platformGroup.add(bouncePad);
+scene.add(platformGroup);
 
 const particleCount = 60;
 const particleGeom = new THREE.BufferGeometry();
@@ -209,8 +211,11 @@ document.addEventListener('mousedown', (e) => {
 });
 document.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
-  panOffsetX = panStartX + (e.clientX - dragStartX) * 0.005;
-  panOffsetY = panStartY - (e.clientY - dragStartY) * 0.005;
+  var pixelScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
+  panOffsetX = panStartX + (e.clientX - dragStartX) * pixelScale;
+  panOffsetY = panStartY - (e.clientY - dragStartY) * pixelScale;
+  panOffsetX = Math.max(-3, Math.min(3, panOffsetX));
+  panOffsetY = Math.max(-0.8, Math.min(2, panOffsetY));
 });
 document.addEventListener('mouseup', () => { isDragging = false; });
 
@@ -225,8 +230,11 @@ document.addEventListener('touchstart', (e) => {
 }, { passive: true });
 container.addEventListener('touchmove', (e) => {
   if (!isDragging || e.touches.length !== 1) return;
-  panOffsetX = panStartX + (e.touches[0].clientX - dragStartX) * 0.005;
-  panOffsetY = panStartY - (e.touches[0].clientY - dragStartY) * 0.005;
+  var pxScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
+  panOffsetX = panStartX + (e.touches[0].clientX - dragStartX) * pxScale;
+  panOffsetY = panStartY - (e.touches[0].clientY - dragStartY) * pxScale;
+  panOffsetX = Math.max(-3, Math.min(3, panOffsetX));
+  panOffsetY = Math.max(-0.8, Math.min(2, panOffsetY));
 }, { passive: true });
 container.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
 
@@ -417,6 +425,7 @@ function animate() {
   }
   particles.geometry.attributes.position.needsUpdate = true;
   ring.material.opacity = 0.08 + Math.sin(time * 0.8) * 0.04;
+  platformGroup.scale.setScalar(1 / Math.max(currentZoom, 0.3));
   renderer.render(scene, camera);
 }
 
