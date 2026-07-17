@@ -190,6 +190,52 @@ container.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 const tapPrompt = document.getElementById('tap-prompt');
+/* ─── Pan / Drag ─── */
+let panOffsetX = 0;
+let panOffsetY = 0;
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let panStartX = 0;
+let panStartY = 0;
+
+container.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  panStartX = panOffsetX;
+  panStartY = panOffsetY;
+});
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  panOffsetX = panStartX + (e.clientX - dragStartX) * 0.005;
+  panOffsetY = panStartY - (e.clientY - dragStartY) * 0.005;
+});
+document.addEventListener('mouseup', () => { isDragging = false; });
+
+container.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    dragStartX = e.touches[0].clientX;
+    dragStartY = e.touches[0].clientY;
+    panStartX = panOffsetX;
+    panStartY = panOffsetY;
+  }
+}, { passive: true });
+container.addEventListener('touchmove', (e) => {
+  if (!isDragging || e.touches.length !== 1) return;
+  panOffsetX = panStartX + (e.touches[0].clientX - dragStartX) * 0.005;
+  panOffsetY = panStartY - (e.touches[0].clientY - dragStartY) * 0.005;
+}, { passive: true });
+container.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
+
+document.getElementById('reset-view').addEventListener('click', () => {
+  currentZoom = 1;
+  panOffsetX = 0;
+  panOffsetY = 0;
+  applyZoom();
+});
+
 const creatureInfo = document.getElementById('creature-info');
 const nfcFlash = document.getElementById('nfc-flash');
 const petBtn = document.getElementById('pet-btn');
@@ -338,7 +384,8 @@ function animate() {
   const time = clock.getElapsedTime();
   if (state.awakened && !state.petting) {
     const breath = Math.sin(time * 1.5) * 0.015;
-    creature.position.y = breath;
+    creature.position.y = breath + panOffsetY;
+    creature.position.x = panOffsetX;
     creature.rotation.z = Math.sin(time * 0.8) * 0.01;
     creature.rotation.x = Math.sin(time * 0.6 + 1) * 0.008;
     const targetX = mouse.x * 0.08;
