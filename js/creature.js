@@ -183,20 +183,49 @@ export function loadGLTF(url) {
     loader.load(url, (gltf) => {
       const model = gltf.scene;
 
-      /* Auto-scale to fit scene */
+      /* Debug: log raw model dimensions */
+      model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const targetSize = 0.3;
-      const scale = targetSize / maxDim;
+      console.log('Raw model size:', size.x, size.y, size.z);
+
+      /* Compute bounding box by traversing mesh children (more reliable) */
+      const bb = new THREE.Box3();
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.computeBoundingBox();
+          if (child.geometry.boundingBox) {
+            const localBox = child.geometry.boundingBox.clone();
+            localBox.applyMatrix4(child.matrixWorld);
+            bb.expandByPoint(localBox.min);
+            bb.expandByPoint(localBox.max);
+          }
+        }
+      });
+
+      const rawSize = bb.getSize(new THREE.Vector3());
+      const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z);
+      console.log('Mesh-traversed model size:', rawSize.x, rawSize.y, rawSize.z, 'maxDim:', maxDim);
+
+      /* Guard against zero/invalid sizes */
+      let scale;
+      if (maxDim > 0.001 && isFinite(maxDim)) {
+        const targetSize = 0.5;
+        scale = targetSize / maxDim;
+      } else {
+        console.warn('Bounding box was empty, using fallback scale 0.02');
+        scale = 0.02;
+      }
       model.scale.set(scale, scale, scale);
 
-      /* Recalculate box after scaling */
+      /* Recalculate box after scaling and center */
       model.updateMatrixWorld(true);
       const box2 = new THREE.Box3().setFromObject(model);
       const center = box2.getCenter(new THREE.Vector3());
       model.position.sub(center);
-      model.position.y += -box2.min.y; /* Sit on ground */
+      model.position.y += -box2.min.y;
+
+      console.log('Final model size after scale/center:', box2.getSize(new THREE.Vector3()), 'position:', model.position);
 
       /* Enable shadows */
       model.traverse((child) => {
