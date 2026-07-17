@@ -187,7 +187,7 @@ export function loadGLTF(url) {
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
-      const targetSize = 1.0;
+      const targetSize = 0.3;
       const scale = targetSize / maxDim;
       model.scale.set(scale, scale, scale);
 
