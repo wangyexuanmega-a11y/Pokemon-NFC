@@ -1,21 +1,43 @@
-/* ─── Creature Config ───
- *   A: { type: 'sprout' }               ← Primitive Sprout (default)
- *   B: { type: 'gltf', url: '...' }     ← glTF/GLB model
- */
-const CREATURE_CONFIG = { type: 'gltf', url: 'models/pikachu.glb' };
-/* ────────────────────── */
-
 import * as THREE from 'three';
 import { buildSprout, loadGLTF, doBlink, wiggleEars, trackMouse, resetPetPose, petWiggle } from './creature.js';
+import { NFCManager, DEFAULT_BUDDY } from './nfc.js';
+
+/* ─── Buddy Catalog ───
+ * 每个 ID 对应一只 NFC 伙伴。当前模型资源有限，
+ * 所有 ID 先复用 pikachu.glb，信息层可以不同。
+ */
+const BUDDY_CATALOG = {
+  pikachu: {
+    name: 'Pikachu',
+    type: 'NFC Buddy - Electric Type',
+    tags: ['Playful', 'Loyal'],
+    avatar: 'P',
+    model: { type: 'gltf', url: 'models/pikachu.glb' },
+  },
+  sprout: {
+    name: 'Sprout',
+    type: 'NFC Buddy - Seed Type',
+    tags: ['Curious', 'Gentle'],
+    avatar: 'S',
+    model: { type: 'sprout' },
+  },
+};
 
 const state = {
-  awakened: false, petting: false,
-  blinkTimer: 0, nextBlink: 3000 + Math.random() * 3000,
+  awakened: false,
+  visible: false,
+  petting: false,
+  blinkTimer: 0,
+  nextBlink: 3000 + Math.random() * 3000,
   petCount: 0,
+  buddyId: DEFAULT_BUDDY,
 };
+
 let creature = null;
 let animTargets = {};
+let currentCreatureModel = null;
 
+/* ─── Three.js Setup ─── */
 const container = document.getElementById('scene-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a1a);
@@ -112,6 +134,7 @@ const particleMat = new THREE.PointsMaterial({
 const particles = new THREE.Points(particleGeom, particleMat);
 scene.add(particles);
 
+/* ─── Input ─── */
 const mouse = new THREE.Vector2();
 document.addEventListener('mousemove', (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -147,11 +170,12 @@ const zoomIndicator = document.querySelector('.zoom-indicator');
 
 function applyZoom() {
   currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom));
-  var isM = container.clientWidth < 480;
-  var baseY = isM ? 1.5 : 1.2;
+  const isM = container.clientWidth < 480;
+  const baseY = isM ? 1.5 : 1.2;
   camera.position.z = baseZ / currentZoom;
-  camera.position.y = baseY + Math.log(currentZoom) * 0.2;
-  camera.lookAt(0, 0.2 - (currentZoom - 1) * 0.06, 0);
+  // 保持相机高度和注视点固定，避免放大时视角上漂
+  camera.position.y = baseY;
+  camera.lookAt(0, 0.2, 0);
   if (zoomIndicator) {
     zoomIndicator.textContent = currentZoom.toFixed(1) + 'x';
   }
@@ -170,7 +194,6 @@ container.addEventListener('wheel', (e) => {
   updateZoom(e.deltaY > 0 ? -0.05 : 0.05);
 }, { passive: false });
 
-/* Pinch-to-zoom for mobile */
 let lastPinchDist = 0;
 container.addEventListener('touchstart', (e) => {
   if (e.touches.length === 2) {
@@ -192,7 +215,16 @@ container.addEventListener('touchmove', (e) => {
   }
 }, { passive: false });
 
-const tapPrompt = document.getElementById('tap-prompt');
+const resetBtn = document.getElementById('reset-view');
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    currentZoom = 1;
+    panOffsetX = 0;
+    panOffsetY = 0;
+    applyZoom();
+  });
+}
+
 /* ─── Pan / Drag ─── */
 let panOffsetX = 0;
 let panOffsetY = 0;
@@ -203,7 +235,7 @@ let panStartX = 0;
 let panStartY = 0;
 
 document.addEventListener('mousedown', (e) => {
-  if (e.target.closest('#zoom-controls, #pet-btn, #top-bar, #bottom-bar, #creature-info')) return;
+  if (e.target.closest('#zoom-controls, #pet-btn, #dismiss-btn, #top-bar, #bottom-bar, #creature-info, #simulate-btn')) return;
   isDragging = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
@@ -212,7 +244,7 @@ document.addEventListener('mousedown', (e) => {
 });
 document.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
-  var pixelScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
+  const pixelScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
   panOffsetX = panStartX + (e.clientX - dragStartX) * pixelScale;
   panOffsetY = panStartY - (e.clientY - dragStartY) * pixelScale;
   panOffsetX = Math.max(-3, Math.min(3, panOffsetX));
@@ -221,7 +253,7 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => { isDragging = false; });
 
 document.addEventListener('touchstart', (e) => {
-  if (e.touches.length === 1 && !e.target.closest('#zoom-controls, #pet-btn, #top-bar, #bottom-bar, #creature-info')) {
+  if (e.touches.length === 1 && !e.target.closest('#zoom-controls, #pet-btn, #dismiss-btn, #top-bar, #bottom-bar, #creature-info, #simulate-btn')) {
     isDragging = true;
     dragStartX = e.touches[0].clientX;
     dragStartY = e.touches[0].clientY;
@@ -231,7 +263,7 @@ document.addEventListener('touchstart', (e) => {
 }, { passive: true });
 container.addEventListener('touchmove', (e) => {
   if (!isDragging || e.touches.length !== 1) return;
-  var pxScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
+  const pxScale = (2 * camera.position.z * Math.tan(camera.fov * Math.PI / 360)) / container.clientHeight;
   panOffsetX = panStartX + (e.touches[0].clientX - dragStartX) * pxScale;
   panOffsetY = panStartY - (e.touches[0].clientY - dragStartY) * pxScale;
   panOffsetX = Math.max(-3, Math.min(3, panOffsetX));
@@ -239,34 +271,52 @@ container.addEventListener('touchmove', (e) => {
 }, { passive: true });
 container.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
 
-var resetBtn = document.getElementById('reset-view') || document.querySelector('#zoom-controls button:last-child');
-if (resetBtn) {
-  resetBtn.addEventListener('click', () => {
-    currentZoom = 1;
-    panOffsetX = 0;
-    panOffsetY = 0;
-    applyZoom();
-  });
-}
-
+/* ─── UI References ─── */
+const tapPrompt = document.getElementById('tap-prompt');
 const creatureInfo = document.getElementById('creature-info');
 const nfcFlash = document.getElementById('nfc-flash');
 const petBtn = document.getElementById('pet-btn');
+const dismissBtn = document.getElementById('dismiss-btn');
+const simulateBtn = document.getElementById('simulate-btn');
+const nfcStatus = document.getElementById('nfc-status');
 
-function handleTap() {
-  if (state.awakened) return;
-  if (!creature) return;
-  state.awakened = true;
+const creatureAvatar = document.getElementById('creature-avatar');
+const creatureName = document.getElementById('creature-name');
+const creatureType = document.getElementById('creature-type');
+const creatureTags = document.getElementById('creature-tags');
+
+/* ─── Creature Logic ─── */
+function flashNFC() {
   nfcFlash.classList.add('active');
   setTimeout(() => nfcFlash.classList.remove('active'), 400);
-  tapPrompt.classList.add('hidden');
-  revealCreature();
+}
+
+function updateCreatureInfo(buddyId) {
+  const buddy = BUDDY_CATALOG[buddyId] || BUDDY_CATALOG[DEFAULT_BUDDY];
+  if (creatureAvatar) creatureAvatar.textContent = buddy.avatar;
+  if (creatureName) creatureName.textContent = buddy.name;
+  if (creatureType) creatureType.textContent = buddy.type;
+  if (creatureTags) {
+    creatureTags.innerHTML = buddy.tags.map(tag => `<span>- ${tag}</span>`).join('');
+  }
+}
+
+function setCreatureVisible(visible) {
+  if (!creature) return;
+  creature.visible = visible;
+  if (!visible) {
+    creature.scale.set(0.001, 0.001, 0.001);
+  }
 }
 
 function revealCreature() {
+  if (!creature) return;
   const finalScale = creature.userData.finalScale || 1;
   const duration = 1200;
   const start = performance.now();
+  creature.visible = true;
+  state.visible = true;
+
   function step(now) {
     const t = Math.min((now - start) / duration, 1);
     const ease = 1 - Math.pow(1 - t, 3) + Math.sin(t * Math.PI * 3.5) * (1 - t) * 0.15;
@@ -286,11 +336,55 @@ function revealCreature() {
   step(performance.now());
 }
 
-document.addEventListener('click', (e) => { if (!state.awakened) handleTap(); });
-document.addEventListener('touchstart', (e) => { if (!state.awakened) handleTap(); }, { passive: true });
+function hideCreature() {
+  if (!creature) return;
+  const finalScale = creature.userData.finalScale || 1;
+  const duration = 500;
+  const start = performance.now();
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const s = Math.max(finalScale * (1 - ease), 0.001);
+    creature.scale.set(s, s, s);
+    creature.position.y = -t * 1.5;
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      creature.visible = false;
+      state.visible = false;
+      creature.scale.set(0.001, 0.001, 0.001);
+      creature.position.y = 0;
+    }
+  }
+  step(performance.now());
+}
+
+function awakenCreature(buddyId = DEFAULT_BUDDY) {
+  if (state.awakened) return;
+  state.awakened = true;
+  state.buddyId = buddyId;
+
+  updateCreatureInfo(buddyId);
+  flashNFC();
+  tapPrompt.classList.add('hidden');
+  revealCreature();
+}
+
+function dismissCreature() {
+  if (!state.awakened) return;
+  state.awakened = false;
+  state.petting = false;
+  creatureInfo.classList.remove('visible');
+  hideCreature();
+  tapPrompt.classList.remove('hidden');
+}
+
 petBtn.addEventListener('click', (e) => { e.stopPropagation(); petCreature(); });
+dismissBtn.addEventListener('click', (e) => { e.stopPropagation(); dismissCreature(); });
 
 function petCreature() {
+  if (!creature || !state.awakened || state.petting) return;
   state.petting = true;
   state.petCount++;
   const jumpHeight = 0.2 + Math.min(state.petCount * 0.05, 0.3);
@@ -315,6 +409,7 @@ function petCreature() {
 }
 
 function burstParticles() {
+  if (!creature) return;
   const count = 20;
   const burstGeom = new THREE.BufferGeometry();
   const pos = new Float32Array(count * 3);
@@ -350,43 +445,94 @@ function burstParticles() {
   step(performance.now());
 }
 
-function init() {
-  creature = CREATURE_CONFIG.type === 'sprout' ? buildSprout() : null;
-  if (CREATURE_CONFIG.type === 'gltf') {
-    loadGLTF(CREATURE_CONFIG.url).then(m => {
-      creature = m;
-      animTargets = creature.userData.animTargets || {};
-      if (!state.awakened) {
-        creature.scale.set(0.001, 0.001, 0.001);
-      }
-      scene.add(creature);
-      if (state.awakened) {
-        revealCreature();
-      }
-    }).catch(e => {
-      console.warn('glTF load failed, using Sprout:', e);
-      creature = buildSprout();
-      animTargets = creature.userData.animTargets || {};
-      if (!state.awakened) {
-        creature.scale.set(0.001, 0.001, 0.001);
-      }
-      scene.add(creature);
-      if (state.awakened) {
-        revealCreature();
-      }
-    });
-  } else {
-    creature = buildSprout();
-    animTargets = creature.userData.animTargets || {};
-    creature.scale.set(0.001, 0.001, 0.001);
-    scene.add(creature);
+/* ─── NFC Setup ─── */
+function setStatus(text, type = '') {
+  if (!nfcStatus) return;
+  nfcStatus.textContent = text;
+  nfcStatus.className = type;
+}
+
+function setupNFC() {
+  const nfc = new NFCManager({
+    onAwaken: (buddyId) => {
+      flashNFC();
+      awakenCreature(buddyId);
+      setStatus('Buddy awakened', 'success');
+    },
+    onError: (error) => {
+      console.error('[NFC]', error);
+      setStatus('NFC error', 'error');
+    },
+    onStatus: (status) => {
+      const map = {
+        unsupported: 'NFC not supported',
+        scanning: 'NFC scanning...',
+      };
+      setStatus(map[status] || status, status === 'unsupported' ? 'warn' : '');
+    },
+  });
+
+  // 1. 如果 URL 带有 ?buddy=xxx，直接唤醒（腕带 URL 场景）
+  const urlBuddy = nfc.readBuddyFromURL();
+  if (urlBuddy) {
+    awakenCreature(urlBuddy);
+    setStatus('Awakened from NFC tag', 'success');
+    return;
   }
+
+  // 2. 否则启动主动扫描
+  nfc.startScan().then((ok) => {
+    if (!ok) {
+      // 桌面环境显示模拟按钮
+      if (!nfc.isSupported() && simulateBtn) {
+        simulateBtn.classList.remove('hidden');
+        simulateBtn.addEventListener('click', () => {
+          awakenCreature(DEFAULT_BUDDY);
+          setStatus('Simulated NFC', 'success');
+        });
+      }
+      // 移动端/不支持 NFC 时给明确提示
+      if (nfc.isSupported()) {
+        setStatus('Tap NFC tag to wake buddy', '');
+      } else {
+        setStatus('NFC unavailable on this device', 'warn');
+      }
+    }
+  });
+}
+
+/* ─── Init & Loop ─── */
+function loadCreatureModel(config) {
+  return new Promise((resolve) => {
+    if (config.type === 'gltf') {
+      loadGLTF(config.url).then((model) => {
+        resolve(model);
+      }).catch((err) => {
+        console.warn('glTF load failed, using Sprout:', err);
+        resolve(buildSprout());
+      });
+    } else {
+      resolve(buildSprout());
+    }
+  });
+}
+
+async function init() {
+  const config = BUDDY_CATALOG[DEFAULT_BUDDY].model;
+  creature = await loadCreatureModel(config);
+  animTargets = creature.userData.animTargets || {};
+  creature.userData.finalScale = creature.userData.finalScale || 1;
+  setCreatureVisible(false);
+  scene.add(creature);
+  currentCreatureModel = config.type;
 
   onResize();
 
   setTimeout(() => {
     document.getElementById('loading-screen').classList.add('hidden');
   }, 800);
+
+  setupNFC();
 }
 
 const clock = new THREE.Clock();
@@ -395,7 +541,7 @@ function animate() {
   if (!creature) return;
   const dt = clock.getDelta();
   const time = clock.getElapsedTime();
-  if (state.awakened && !state.petting) {
+  if (state.awakened && !state.petting && creature.visible) {
     const breath = Math.sin(time * 1.5) * 0.015;
     creature.position.y = breath + panOffsetY;
     creature.position.x = panOffsetX;
@@ -431,8 +577,3 @@ function animate() {
 
 init();
 animate();
-
-const isMobile = window.innerWidth < 768 || 'ontouchstart' in window;
-if (isMobile) {
-  setTimeout(() => { if (!state.awakened) handleTap(); }, 2000);
-}
