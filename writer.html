@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NFC Buddy - 写卡器</title>
+<style>
+:root {
+  --bg: #0a0a1a;
+  --panel: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.1);
+  --cyan: #00d4ff;
+  --green: #4ade80;
+  --red: #f87171;
+  --gold: #ffd700;
+  --text: #f0f0f5;
+  --muted: rgba(255, 255, 255, 0.55);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(0, 212, 255, 0.08), transparent 45%),
+    radial-gradient(circle at 90% 80%, rgba(255, 107, 157, 0.06), transparent 45%),
+    var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 48px;
+}
+
+main {
+  width: 100%;
+  max-width: 520px;
+}
+
+header {
+  margin-bottom: 20px;
+}
+
+header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+header p {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.panel h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan);
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.buddy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.buddy-card {
+  border: 1.5px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.buddy-card .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f5e6ca, #e8d5b0);
+  color: #2c1810;
+}
+
+.buddy-card .name {
+  font-size: 13px;
+}
+
+.buddy-card.selected {
+  border-color: var(--cyan);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+input[type="text"],
+input[type="url"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+input:focus {
+  border-color: var(--cyan);
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.preview {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed rgba(0, 212, 255, 0.35);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--cyan);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#write-btn {
+  background: var(--cyan);
+  color: #041018;
+}
+
+#write-btn:active {
+  transform: scale(0.96);
+}
+
+#erase-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#erase-btn:active {
+  transform: scale(0.96);
+}
+
+#status {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  display: none;
+}
+
+#status.show { display: block; }
+#status.busy { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); color: #fbbf24; }
+#status.success { background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.3); color: var(--green); }
+#status.error { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--red); }
+
+.chip-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.chip-note strong {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+@media (max-width: 360px) {
+  .buddy-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>NFC Buddy 写卡器</h1>
+    <p>选好宝可梦后，把手机背面靠近手环芯片，URL 就会写进芯片。</p>
+  </header>
+
+  <section class="panel">
+    <h2>1. 选择宝可梦</h2>
+    <div class="buddy-grid">
+      <button type="button" class="buddy-card selected" data-buddy="pikachu">
+        <span class="avatar">P</span>
+        <span class="name">Pikachu</span>
+      </button>
+      <button type="button" class="buddy-card" data-buddy="sprout">
+        <span class="avatar">S</span>
+        <span class="name">Sprout</span>
+      </button>
+      <button type="button" class="buddy-card" data-buddy="custom">
+        <span class="avatar">+</span>
+        <span class="name">自定义</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="panel" id="custom-panel" hidden>
+    <label for="custom-buddy">自定义 buddy ID（对应网页里的 BUDDY_CATALOG）</label>
+    <input type="text" id="custom-buddy" placeholder="例如 charmander">
+  </section>
+
+  <section class="panel">
+    <h2>2. 网页地址</h2>
+    <label for="base-url">手机碰卡后打开的基础网址</label>
+    <input type="url" id="base-url" value="https://wangyexuanmega-a11y.github.io/Pokemon-NFC/">
+    <p class="hint">写卡时会自动在后面加上 <code>?buddy=xxx</code>。如果以后换了域名，改这里就行。</p>
+  </section>
+
+  <section class="panel">
+    <h2>3. 写入芯片</h2>
+    <div class="preview" id="url-preview">等待生成...</div>
+    <div class="actions">
+      <button type="button" id="write-btn">写入 NFC 芯片</button>
+      <button type="button" id="erase-btn">清空</button>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section class="panel">
+    <h2>芯片说明</h2>
+    <p class="chip-note">
+      推荐使用 <strong>NTAG213</strong>（144 字节用户区），普通 NFC 手环、钥匙扣基本都是这种，价格便宜。
+      如果以后要在芯片里存更多数据（等级、技能、皮肤等），可以换 <strong>NTAG215</strong>（504 字节）或 <strong>NTAG216</strong>（888 字节），写法完全一样。
+    </p>
+  </section>
+</main>
+
+<script type="module">
+const BUDDIES = {
+  pikachu: { name: 'Pikachu', avatar: 'P' },
+  sprout: { name: 'Sprout', avatar: 'S' },
+};
+
+let selectedBuddy = 'pikachu';
+
+const buddyCards = document.querySelectorAll('.buddy-card');
+const customPanel = document.getElementById('custom-panel');
+const customBuddyInput = document.getElementById('custom-buddy');
+const baseUrlInput = document.getElementById('base-url');
+const urlPreview = document.getElementById('url-preview');
+const statusBox = document.getElementById('status');
+
+function buildURL() {
+  const base = baseUrlInput.value.trim().replace(/\/+$/, '');
+  let buddy = selectedBuddy;
+  if (selectedBuddy === 'custom') {
+    buddy = customBuddyInput.value.trim() || 'pikachu';
+  }
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}buddy=${encodeURIComponent(buddy)}`;
+}
+
+function updatePreview() {
+  urlPreview.textContent = buildURL();
+}
+
+buddyCards.forEach((card) => {
+  card.addEventListener('click', () => {
+    buddyCards.forEach((c) => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedBuddy = card.dataset.buddy;
+    customPanel.hidden = selectedBuddy !== 'custom';
+    updatePreview();
+  });
+});
+
+customBuddyInput.addEventListener('input', updatePreview);
+baseUrlInput.addEventListener('input', updatePreview);
+
+function showStatus(text, type) {
+  statusBox.textContent = text;
+  statusBox.className = `show ${type}`;
+}
+
+function nfcSupported() {
+  return 'NDEFWriter' in window;
+}
+
+async function writeTag() {
+  if (!nfcSupported()) {
+    showStatus('当前浏览器不支持 Web NFC 写入。请在 Android Chrome 中打开此页面（需要 HTTPS）。', 'error');
+    return;
+  }
+
+  const url = buildURL();
+  try {
+    const writer = new NDEFWriter();
+    showStatus('请把手机背面靠近手环芯片，保持不动...', 'busy');
+    await writer.write({ records: [{ type: 'url', data: url }] });
+    showStatus('写入成功！现在碰一下手环试试吧。', 'success');
+  } catch (error) {
+    if (error.name === 'NotAllowedError') {
+      showStatus('没有写入权限，请先在浏览器里允许 NFC 权限。', 'error');
+    } else if (error.name === 'NotReadableError') {
+      showStatus('没读到芯片，或者芯片不是可写类型。确认芯片是 NTAG213/215/216 这类可写标签。', 'error');
+    } else {
+      showStatus(`写入失败：${error.message || error.name || error}`, 'error');
+    }
+  }
+}
+
+async function eraseTag() {
+  if (!nfcSupported()) {
+    showStatus('当前浏览器不支持 Web NFC 写入。', 'error');
+    return;
+  }
+  try {
+    const writer = new NDEFWriter();
+    showStatus('请把手机靠近芯片，清空内容...', 'busy');
+    await writer.write({ records: [] });
+    showStatus('芯片已清空。', 'success');
+  } catch (error) {
+    showStatus(`清空失败：${error.message || error.name || error}`, 'error');
+  }
+}
+
+document.getElementById('write-btn').addEventListener('click', writeTag);
+document.getElementById('erase-btn').addEventListener('click', eraseTag);
+
+updatePreview();
+</script>
+</body>
+</html>
