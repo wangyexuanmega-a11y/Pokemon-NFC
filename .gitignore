@@ -2,3 +2,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# 本地临时文件
+temp_patch.txt
+
+# 压缩包/大文件
+*.zip
