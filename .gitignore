@@ -8,3 +8,12 @@ temp_patch.txt
 
 # 压缩包/大文件
 *.zip
+
+# Android / Gradle
+local.properties
+*.iml
+.gradle/
+.kotlin/
+build/
+.idea/
+captures/
