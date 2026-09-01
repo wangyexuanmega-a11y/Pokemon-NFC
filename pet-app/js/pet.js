@@ -1,11 +1,13 @@
 /* 通用 2D 宠物渲染器
  *
- * 两种素材模式：
- *   1. 透明 PNG 图片：加载后自动裁剪到不透明内容，配合程序化待机动画
- *      （浮动呼吸、摇摆、地面阴影、出场/开心/收起粒子特效）
- *   2. 无图片：回退为程序化绘制的 chibi 皮卡丘（占位）
+ * 当前阶段：静态素材模式 —— 透明 PNG + 轻微待机浮动（呼吸/摇摆/地面阴影），
+ * 交互动作动画已暂停（后续换 3D 动画）。
  *
- * 对外接口：setImage() / appear() / happy() / wave() / dismiss() / tick(dt) / draw()
+ * 支持「高清 / 像素」两种素材：
+ *   高清：平滑缩放（imageSmoothingEnabled = true）
+ *   像素：最近邻缩放，保持像素锐利（imageSmoothingEnabled = false）
+ *
+ * 对外接口：setImage(src, pixelated) / appear() / dismiss() / tick(dt) / draw()
  */
 
 const TAU = Math.PI * 2;
@@ -37,11 +39,11 @@ function drawRing(ctx, k) {
   ctx.stroke();
 }
 
-/* ─── 程序化皮卡丘（占位回退） ─── */
-function drawTail(ctx, wag) {
+/* ─── 程序化皮卡丘（仅当某只宝可梦没有图片时的占位回退，静态绘制） ─── */
+function drawTail(ctx) {
   ctx.save();
   ctx.translate(0.72, -0.1);
-  ctx.rotate(0.5 + wag);
+  ctx.rotate(0.5);
   ctx.fillStyle = '#8B5A2B';
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -88,15 +90,15 @@ function drawEar(ctx) {
   ctx.fill();
 }
 
-function drawEars(ctx, ear) {
+function drawEars(ctx) {
   ctx.save();
   ctx.translate(-0.44, -0.58);
-  ctx.rotate(-0.26 + ear);
+  ctx.rotate(-0.26);
   drawEar(ctx);
   ctx.restore();
   ctx.save();
   ctx.translate(0.44, -0.58);
-  ctx.rotate(0.26 - ear);
+  ctx.rotate(0.26);
   drawEar(ctx);
   ctx.restore();
 }
@@ -114,47 +116,33 @@ function drawBody(ctx, breath) {
   ctx.restore();
 }
 
-function drawEye(ctx, x, y, r, blink) {
+function drawEye(ctx, x, y, r) {
   ctx.save();
   ctx.translate(x, y);
-  const open = blink > 0.9 ? 0.08 : 1;
   ctx.fillStyle = '#2B1B12';
   ctx.beginPath();
-  ctx.ellipse(0, 0, r, r * open, 0, 0, TAU);
+  ctx.ellipse(0, 0, r, r, 0, 0, TAU);
   ctx.fill();
-  if (blink < 0.5) {
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(r * 0.3, -r * 0.35, r * 0.26, 0, TAU);
-    ctx.fill();
-  }
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(r * 0.3, -r * 0.35, r * 0.26, 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 
-function drawFace(ctx, blink, mouth) {
-  drawEye(ctx, -0.32, -0.24, 0.19, blink);
-  drawEye(ctx, 0.32, -0.24, 0.19, blink);
+function drawFace(ctx) {
+  drawEye(ctx, -0.32, -0.24, 0.19);
+  drawEye(ctx, 0.32, -0.24, 0.19);
   ctx.fillStyle = '#2B1B12';
   ctx.beginPath();
   ctx.ellipse(0, -0.02, 0.045, 0.035, 0, 0, TAU);
   ctx.fill();
-  if (mouth > 0) {
-    ctx.fillStyle = '#7A2C2C';
-    ctx.beginPath();
-    ctx.ellipse(0, 0.15, 0.17, 0.1 + 0.08 * mouth, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#FF8A8A';
-    ctx.beginPath();
-    ctx.ellipse(0, 0.24, 0.08, 0.04, 0, 0, TAU);
-    ctx.fill();
-  } else {
-    ctx.strokeStyle = '#2B1B12';
-    ctx.lineWidth = 0.035;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(0, 0.02, 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
-    ctx.stroke();
-  }
+  ctx.strokeStyle = '#2B1B12';
+  ctx.lineWidth = 0.035;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(0, 0.02, 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
   ctx.fillStyle = '#E5422D';
   ctx.beginPath();
   ctx.ellipse(-0.62, 0.14, 0.18, 0.14, 0, 0, TAU);
@@ -173,10 +161,10 @@ function drawFeet(ctx) {
   ctx.stroke();
 }
 
-function drawArm(ctx, x, rot) {
+function drawArms(ctx) {
   ctx.save();
-  ctx.translate(x, 0.28);
-  ctx.rotate(rot);
+  ctx.translate(-0.92, 0.28);
+  ctx.rotate(-0.4);
   ctx.fillStyle = '#F8D030';
   ctx.strokeStyle = '#C9A227';
   ctx.lineWidth = 0.04;
@@ -185,37 +173,17 @@ function drawArm(ctx, x, rot) {
   ctx.fill();
   ctx.stroke();
   ctx.restore();
-}
-
-function drawArms(ctx, arm) {
-  drawArm(ctx, -0.92, -0.4 - arm * 0.7);
-  drawArm(ctx, 0.92, 0.4 + arm * 0.7);
-}
-
-/* ─── 特效 ─── */
-function drawHeart(ctx, s) {
-  ctx.fillStyle = '#FF5C8A';
+  ctx.save();
+  ctx.translate(0.92, 0.28);
+  ctx.rotate(0.4);
+  ctx.fillStyle = '#F8D030';
+  ctx.strokeStyle = '#C9A227';
+  ctx.lineWidth = 0.04;
   ctx.beginPath();
-  ctx.moveTo(0, s * 0.35);
-  ctx.bezierCurveTo(-s, -s * 0.4, -s * 0.45, -s, 0, -s * 0.32);
-  ctx.bezierCurveTo(s * 0.45, -s, s, -s * 0.4, 0, s * 0.35);
+  ctx.ellipse(0, 0.16, 0.14, 0.24, 0, 0, TAU);
   ctx.fill();
-}
-
-function drawStar(ctx, s) {
-  ctx.fillStyle = '#FFD34D';
-  ctx.beginPath();
-  for (let i = 0; i < 5; i++) {
-    const a = -Math.PI / 2 + i * (TAU / 5);
-    const a2 = a + Math.PI / 5;
-    const px = Math.cos(a) * s, py = Math.sin(a) * s;
-    const ix = Math.cos(a2) * s * 0.45, iy = Math.sin(a2) * s * 0.45;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-    ctx.lineTo(ix, iy);
-  }
-  ctx.closePath();
-  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 /* ─── 宠物主体 ─── */
@@ -230,20 +198,19 @@ export class Pet {
     this.cx = 0;
     this.cy = 0;
     this.R = 100; // 参考半径（px）
-    this.state = 'hidden'; // hidden | appearing | idle | happy | waving | leaving
+    this.state = 'hidden'; // hidden | appearing | idle | leaving
     this.stateT = 0;
     this.time = 0;
     this.appearAt = -10; // 出场时刻（用于光环淡出）
     this.visible = false;
-    this.particles = [];
-    this.floaters = [];
     this.onVisibleChange = null;
 
     this.image = null;
     this.contentBox = null; // 不透明内容边界 {x,y,w,h}
     this.imageFailed = false;
+    this.pixelated = false;
 
-    if (opts.image) this.setImage(opts.image);
+    if (opts.image) this.setImage(opts.image, !!opts.pixelated);
 
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
@@ -260,8 +227,9 @@ export class Pet {
     this.R = Math.min(this.w, this.h) * 0.26;
   }
 
-  /** 更换宠物图片（透明 PNG） */
-  setImage(src) {
+  /** 更换宠物图片；pixelated = true 时用最近邻缩放（像素素材保持锐利） */
+  setImage(src, pixelated = false) {
+    this.pixelated = !!pixelated;
     this.image = null;
     this.contentBox = null;
     this.imageFailed = false;
@@ -305,21 +273,7 @@ export class Pet {
     this.stateT = 0;
     this.appearAt = this.time;
     this.visible = true;
-    this.spawnParticles();
     if (this.onVisibleChange) this.onVisibleChange(true);
-  }
-
-  happy() {
-    if (!this.visible || this.state === 'leaving') return;
-    this.state = 'happy';
-    this.stateT = 0;
-    this.spawnFloaters();
-  }
-
-  wave() {
-    if (!this.visible || this.state === 'leaving') return;
-    this.state = 'waving';
-    this.stateT = 0;
   }
 
   dismiss() {
@@ -328,69 +282,24 @@ export class Pet {
     this.stateT = 0;
   }
 
-  spawnParticles() {
-    this.particles = [];
-    for (let i = 0; i < 26; i++) {
-      const ang = Math.random() * TAU;
-      const sp = 0.5 + Math.random() * 1.4;
-      this.particles.push({
-        x: 0, y: 0,
-        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-        life: 0, maxLife: 0.5 + Math.random() * 0.6,
-        size: 0.025 + Math.random() * 0.05,
-        warm: Math.random() < 0.55,
-      });
-    }
-  }
-
-  spawnFloaters() {
-    for (let i = 0; i < 5; i++) {
-      this.floaters.push({
-        x: (Math.random() - 0.5) * 0.7,
-        y: -0.75 + Math.random() * 0.2,
-        vy: -(0.55 + Math.random() * 0.55),
-        life: 0, maxLife: 1.6 + Math.random() * 0.6,
-        size: 0.14 + Math.random() * 0.1,
-        kind: Math.random() < 0.7 ? 'heart' : 'star',
-      });
-    }
-  }
-
   tick(dt) {
     this.time += dt;
     this.stateT += dt;
 
-    const D = { appearing: 0.9, happy: 1.3, waving: 1.3, leaving: 0.6 };
+    const D = { appearing: 0.9, leaving: 0.6 };
     if (this.state === 'appearing' && this.stateT >= D.appearing) this.state = 'idle';
-    if ((this.state === 'happy' || this.state === 'waving') && this.stateT >= D[this.state]) this.state = 'idle';
     if (this.state === 'leaving' && this.stateT >= D.leaving) {
       this.state = 'hidden';
       this.visible = false;
       if (this.onVisibleChange) this.onVisibleChange(false);
     }
-
-    for (const p of this.particles) {
-      p.life += dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vx *= 0.95;
-      p.vy *= 0.95;
-    }
-    this.particles = this.particles.filter((p) => p.life < p.maxLife);
-
-    for (const f of this.floaters) {
-      f.life += dt;
-      f.y += f.vy * dt;
-      f.x += Math.sin(f.life * 6) * 0.015;
-    }
-    this.floaters = this.floaters.filter((f) => f.life < f.maxLife);
   }
 
   _params() {
     const t = this.time;
     const st = this.stateT;
     const s = this.state;
-    const p = { alpha: 1, scale: 1, bob: 0, breath: 0, rot: 0, jump: 0, ring: 1 };
+    const p = { alpha: 1, scale: 1, bob: 0, breath: 0, rot: 0, ring: 1 };
 
     if (s === 'hidden') { p.alpha = 0; p.scale = 0; return p; }
     if (s === 'appearing') {
@@ -406,15 +315,10 @@ export class Pet {
       p.ring = clamp(1 - (t - this.appearAt) / 0.8, 0, 1);
     }
 
+    // 轻微待机浮动（让宠物看起来是“活的”，不是贴纸）
     p.bob = Math.sin(t * 2.1) * 0.05;
     p.breath = Math.sin(t * 1.7) * 0.02;
     p.rot = Math.sin(t * 0.7) * 0.03;
-
-    if (s === 'happy' || s === 'waving') {
-      const prog = st / 1.3;
-      p.jump = Math.sin(prog * Math.PI * 3) * (1 - prog) * 0.26;
-      p.rot = s === 'waving' ? Math.sin(st * 10) * 0.14 : Math.sin(st * 6) * 0.06;
-    }
 
     return p;
   }
@@ -432,7 +336,7 @@ export class Pet {
 
     const R = this.R;
     const groundY = this.cy + R * 1.35;
-    const petY = this.cy + (p.bob + p.jump) * R;
+    const petY = this.cy + (p.bob + 0) * R;
 
     // 地面阴影 + 召唤光环（固定在地面）
     ctx.save();
@@ -457,19 +361,11 @@ export class Pet {
       this._drawProcedural(ctx, p);
     }
     ctx.restore();
-
-    // 特效粒子
-    ctx.save();
-    ctx.translate(this.cx, petY);
-    ctx.scale(R, R);
-    this._drawParticles(ctx);
-    this._drawFloaters(ctx);
-    ctx.restore();
   }
 
   _drawHalo(ctx, cy, radius) {
     const g = ctx.createRadialGradient(0, cy, radius * 0.1, 0, cy, radius);
-    g.addColorStop(0, 'rgba(140, 220, 140, 0.22)');
+    g.addColorStop(0, 'rgba(140, 220, 140, 0.18)');
     g.addColorStop(1, 'rgba(140, 220, 140, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(-radius, cy - radius, radius * 2, radius * 2);
@@ -480,52 +376,19 @@ export class Pet {
     const targetH = 1.6 * (1 + p.breath);
     const aspect = cb.w / cb.h;
     const dw = targetH * aspect;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    // 像素素材用最近邻（锐利），高清素材用平滑
+    ctx.imageSmoothingEnabled = !this.pixelated;
     // 底部对齐（脚踩在地面）
     ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -targetH, dw, targetH);
+    ctx.imageSmoothingEnabled = true;
   }
 
   _drawProcedural(ctx, p) {
-    const t = this.time;
-    const ear = Math.sin(t * 0.9) * 0.03;
-    const tail = Math.sin(t * 1.3) * 0.16;
-    const cyc = t % 3.0;
-    let blink = 0;
-    if (cyc < 0.12) blink = 1;
-    else if (cyc < 0.2) blink = 1 - (cyc - 0.12) / 0.08;
-    const mouth = this.state === 'happy' || this.state === 'waving' ? 1 : 0;
-    const arm = this.state === 'waving'
-      ? Math.abs(Math.sin(this.stateT * 9))
-      : (this.state === 'happy' ? 0.35 : 0);
-
-    drawTail(ctx, tail);
-    drawEars(ctx, ear);
+    drawTail(ctx);
+    drawEars(ctx);
     drawBody(ctx, p.breath);
     drawFeet(ctx);
-    drawArms(ctx, arm);
-    drawFace(ctx, blink, mouth);
-  }
-
-  _drawParticles(ctx) {
-    for (const p of this.particles) {
-      const k = 1 - p.life / p.maxLife;
-      ctx.fillStyle = p.warm ? `rgba(248,208,48,${k})` : `rgba(0,212,255,${k})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, TAU);
-      ctx.fill();
-    }
-  }
-
-  _drawFloaters(ctx) {
-    for (const f of this.floaters) {
-      const k = 1 - f.life / f.maxLife;
-      ctx.save();
-      ctx.translate(f.x, f.y);
-      ctx.globalAlpha = k;
-      if (f.kind === 'heart') drawHeart(ctx, f.size);
-      else drawStar(ctx, f.size);
-      ctx.restore();
-    }
+    drawArms(ctx);
+    drawFace(ctx);
   }
 }

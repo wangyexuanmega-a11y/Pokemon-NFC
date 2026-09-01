@@ -11,14 +11,20 @@ App 主界面（选择宝可梦 / NFC 碰手环）
 H5 summon(buddy) → JS 桥接 PetBridge.summon(id)
    │
    ▼
-原生创建透明悬浮窗（TYPE_APPLICATION_OVERLAY）
+原生创建透明悬浮窗（TYPE_APPLICATION_OVERLAY，可拖拽）
   加载 overlay 模式 H5（?native=1&overlay=1&buddy=xxx）
    │
    ▼
-宠物站在桌面上（透明背景 + 地面阴影 + 待机动画）
-   · 点宠物 = 摸摸它（跳 + 爱心）
-   · App 控制卡可 摸摸它 / 打招呼 / 收起宠物 / 换一只
+宠物站在桌面上（透明背景 + 地面阴影 + 轻微待机浮动）
+   · 按住拖动 = 移动宠物位置
+   · App 控制卡可 收起宠物 / 换一只（控制卡在顶部，不会被宠物挡住）
 ```
+
+## 在线加载（重要）
+
+- App 内容**从 GitHub Pages 在线加载**（`https://wangyexuanmega-a11y.github.io/Pokemon-NFC/pet-app/`）。
+- **以后只改宠物素材/页面，推送 GitHub 后 App 自动显示新版，无需重装 APK。**
+- 没网时自动回退到内置资源（离线可用旧版）。
 
 ## 获取 APK（两种方式）
 

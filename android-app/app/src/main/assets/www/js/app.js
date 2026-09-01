@@ -1,15 +1,27 @@
-/* 主接线：宝可梦选择 → 召唤宠物（悬浮窗 / 页面内）→ 交互；NFC 唤醒 */
+/* 主接线：选择宝可梦（高清/像素可切换）→ 召唤悬浮宠物（App）/ 页面显示（网页）；NFC 唤醒 */
 
 import { NFCManager } from './nfc.js';
 import { Pet } from './pet.js';
 
 /* ─── 宝可梦目录 ───
- * 加新宝可梦：把透明 PNG 放到 sprites/ 下，然后在这里加一行即可。
+ * 每只宝可梦有两种素材：
+ *   hd    —— 高清图（默认）
+ *   pixel —— 像素图
+ * 加新宝可梦：把图片放到 sprites/ 下（高清）和 sprites/pixel/ 下（像素），加一行即可。
  */
 const BUDDIES = {
-  bulbasaur: { name: '妙蛙种子', type: '草系', image: 'sprites/bulbasaur.png' },
-  ivysaur: { name: '妙蛙草', type: '草系', image: 'sprites/ivysaur.png' },
-  venusaur: { name: '妙蛙花', type: '草系', image: 'sprites/venusaur.png' },
+  bulbasaur: {
+    name: '妙蛙种子', type: '草系',
+    hd: 'sprites/bulbasaur.png', pixel: 'sprites/pixel/bulbasaur.png',
+  },
+  ivysaur: {
+    name: '妙蛙草', type: '草系',
+    hd: 'sprites/ivysaur.png', pixel: 'sprites/pixel/ivysaur.png',
+  },
+  venusaur: {
+    name: '妙蛙花', type: '草系',
+    hd: 'sprites/venusaur.png', pixel: 'sprites/pixel/venusaur.png',
+  },
 };
 
 /* 预留空位（以后补充图鉴时直接启用） */
@@ -25,13 +37,19 @@ const controlCard = document.getElementById('control-card');
 const ccName = document.getElementById('cc-name');
 const nfcStatus = document.getElementById('nfc-status');
 const grid = document.getElementById('buddy-grid');
-const petBtn = document.getElementById('pet-btn');
-const waveBtn = document.getElementById('wave-btn');
 const dismissBtn = document.getElementById('dismiss-btn');
 const backBtn = document.getElementById('back-btn');
+const variantHd = document.getElementById('variant-hd');
+const variantPixel = document.getElementById('variant-pixel');
 
 const pet = new Pet(canvas, {});
 let currentBuddy = null;
+
+/* 素材版本：高清 / 像素（记住选择） */
+let variant = 'hd';
+try {
+  if (localStorage.getItem('petVariant') === 'pixel') variant = 'pixel';
+} catch (e) { /* localStorage 不可用时保持默认 */ }
 
 function setStatus(text, type = '') {
   nfcStatus.textContent = text;
@@ -41,6 +59,36 @@ function setStatus(text, type = '') {
 function buddyOf(id) {
   return BUDDIES[id] || null;
 }
+
+function variantImage(b) {
+  return b[variant] || b.hd;
+}
+
+/* ─── 高清 / 像素切换 ─── */
+function applyVariantUI() {
+  variantHd.classList.toggle('active', variant === 'hd');
+  variantPixel.classList.toggle('active', variant === 'pixel');
+  if (!currentBuddy) return;
+  // 已有宠物在场：立即应用新素材
+  const b = buddyOf(currentBuddy);
+  if (!b) return;
+  if (isNative && window.PetBridge) {
+    // App 模式：重载悬浮窗应用新素材
+    window.PetBridge.summon(currentBuddy);
+  } else if (!isOverlay) {
+    pet.setImage(variantImage(b), variant === 'pixel');
+  }
+}
+variantHd.addEventListener('click', () => {
+  variant = 'hd';
+  try { localStorage.setItem('petVariant', 'hd'); } catch (e) { /* ignore */ }
+  applyVariantUI();
+});
+variantPixel.addEventListener('click', () => {
+  variant = 'pixel';
+  try { localStorage.setItem('petVariant', 'pixel'); } catch (e) { /* ignore */ }
+  applyVariantUI();
+});
 
 /* ─── 选择界面 ─── */
 function renderSelection() {
@@ -72,11 +120,11 @@ function summon(id) {
   showControl(b);
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    // App 模式：原生创建悬浮宠物窗口
+    // App 模式：原生创建悬浮宠物窗口（可拖拽）
     window.PetBridge.summon(id);
   } else if (!isOverlay) {
     // 网页模式：直接显示在页面里
-    pet.setImage(b.image);
+    pet.setImage(variantImage(b), variant === 'pixel');
     pet.appear();
   }
 }
@@ -92,15 +140,7 @@ function backToSelection() {
   selectionScreen.classList.remove('hidden');
 }
 
-/* ─── 交互 ─── */
-petBtn.addEventListener('click', () => {
-  if (isNative && window.PetBridge) window.PetBridge.pet();
-  else pet.happy();
-});
-waveBtn.addEventListener('click', () => {
-  if (isNative && window.PetBridge) window.PetBridge.wave();
-  else pet.wave();
-});
+/* ─── 交互（动作动画已暂停，仅保留收起/换一只） ─── */
 dismissBtn.addEventListener('click', () => {
   if (isNative && window.PetBridge) window.PetBridge.dismiss();
   else pet.dismiss();
@@ -108,17 +148,6 @@ dismissBtn.addEventListener('click', () => {
   setStatus('已收起', '');
 });
 backBtn.addEventListener('click', backToSelection);
-
-/* 点一下宠物 = 摸摸它（悬浮窗模式里也生效） */
-canvas.addEventListener('pointerdown', (e) => {
-  if (!pet.visible || (isNative && !isOverlay)) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const dx = x - pet.cx;
-  const dy = y - pet.cy;
-  if (dx * dx + dy * dy <= (pet.R * 1.4) ** 2) pet.happy();
-});
 
 /* ─── 原生桥接（App 内） ─── */
 window.__petNfc = function (id) {
@@ -134,20 +163,21 @@ window.__petNfc = function (id) {
 /* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
 if (isOverlay) {
   document.body.classList.add('overlay-mode');
+  try {
+    if (localStorage.getItem('petVariant') === 'pixel') variant = 'pixel';
+  } catch (e) { /* ignore */ }
   const id = params.get('buddy') || 'bulbasaur';
   const b = buddyOf(id);
   if (b) {
-    pet.setImage(b.image);
+    pet.setImage(variantImage(b), variant === 'pixel');
     pet.appear();
   }
-  // 供原生控制：摸摸 / 打招呼
-  window.__petHappy = () => pet.happy();
-  window.__petWave = () => pet.wave();
 }
 
 /* ─── NFC ─── */
 if (!isOverlay) {
   renderSelection();
+  applyVariantUI();
   const nfc = new NFCManager({
     onAwaken: (id) => window.__petNfc(id),
     onError: () => setStatus('NFC 读取失败', 'error'),

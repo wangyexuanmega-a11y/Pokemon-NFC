@@ -125,11 +125,41 @@ body.overlay-mode #control-card {
   to { opacity: 1; transform: translate(-50%, -50%); }
 }
 
+.ss-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+
 .ss-title {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: 2px;
-  margin-bottom: 26px;
+}
+
+/* 高清 / 像素切换 */
+.variant-toggle {
+  display: flex;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.vt-btn {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: rgba(255,255,255,.05);
+  border: none;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.vt-btn + .vt-btn { border-left: 1px solid rgba(255,255,255,.14); }
+.vt-btn.active {
+  background: rgba(126,208,126,.22);
+  color: var(--green);
 }
 
 #buddy-grid {
@@ -211,11 +241,11 @@ body.overlay-mode #control-card {
   color: var(--text-dim);
 }
 
-/* ─── 控制卡片 ─── */
+/* ─── 控制卡片（放在顶部，避免被底部悬浮宠物挡住） ─── */
 #control-card {
   position: fixed;
   left: 16px; right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  top: calc(64px + env(safe-area-inset-top));
   background: rgba(18, 28, 22, .82);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -223,11 +253,11 @@ body.overlay-mode #control-card {
   border-radius: 18px;
   padding: 14px 16px;
   z-index: 10;
-  animation: slideUp .35s ease;
+  animation: slideDown .35s ease;
 }
 
-@keyframes slideUp {
-  from { transform: translateY(24px); opacity: 0; }
+@keyframes slideDown {
+  from { transform: translateY(-24px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 

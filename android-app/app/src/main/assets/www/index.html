@@ -20,17 +20,21 @@
 
   <!-- 宝可梦选择界面 -->
   <div id="selection-screen">
-    <div class="ss-title">选择你的伙伴</div>
+    <div class="ss-head">
+      <div class="ss-title">选择你的伙伴</div>
+      <div class="variant-toggle">
+        <button id="variant-hd" class="vt-btn active" type="button">高清版</button>
+        <button id="variant-pixel" class="vt-btn" type="button">像素版</button>
+      </div>
+    </div>
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后会以悬浮宠物出现在屏幕上<br>碰一下 NFC 手环也能直接唤醒</p>
+    <p class="ss-hint">选择后会以悬浮宠物出现在屏幕上（可拖拽位置）<br>碰一下 NFC 手环也能直接唤醒</p>
   </div>
 
   <!-- 控制卡片 -->
   <div id="control-card" class="hidden">
     <div class="cc-name" id="cc-name">妙蛙种子</div>
     <div class="cc-actions">
-      <button id="pet-btn" type="button">摸摸它</button>
-      <button id="wave-btn" type="button">打招呼</button>
       <button id="dismiss-btn" type="button">收起宠物</button>
       <button id="back-btn" type="button" class="secondary">换一只</button>
     </div>

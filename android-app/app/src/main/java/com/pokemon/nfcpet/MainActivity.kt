@@ -15,8 +15,11 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -28,8 +31,8 @@ import androidx.webkit.WebViewAssetLoader
  * 宝可梦 NFC 宠物 —— 原生壳
  *
  * - 主界面 WebView：宝可梦选择界面（H5，?native=1）
- * - 悬浮宠物窗口：透明 WebView（TYPE_APPLICATION_OVERLAY），加载 overlay 模式 H5
- *   （?native=1&overlay=1&buddy=xxx），宠物像真的站在屏幕上
+ * - 内容优先从 GitHub Pages 在线加载（改内容不用重新装 APK），失败时回退到内置资源
+ * - 悬浮宠物窗口：透明 WebView（TYPE_APPLICATION_OVERLAY）+ 可拖拽
  * - NFC：前台调度 + NDEF 意图读取手环 → JS 桥接唤醒 → H5 走 summon 流程
  */
 class MainActivity : Activity() {
@@ -41,6 +44,13 @@ class MainActivity : Activity() {
     private var pageLoaded = false
     private var pendingBuddy: String? = null
 
+    // 拖拽状态
+    private var dragX = 0f
+    private var dragY = 0f
+    private var startLx = 0
+    private var startLy = 0
+    private var dragging = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -48,7 +58,7 @@ class MainActivity : Activity() {
         mainWebView = buildWebView()
         mainWebView.addJavascriptInterface(PetBridge(), "PetBridge")
         setContentView(mainWebView)
-        mainWebView.loadUrl("$INDEX?native=1")
+        mainWebView.loadUrl("$REMOTE_INDEX?native=1")
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         handleNfcIntent(intent)
@@ -86,7 +96,7 @@ class MainActivity : Activity() {
         handleNfcIntent(intent)
     }
 
-    /* ─── WebView 工厂 ─── */
+    /* ─── WebView 工厂（在线加载 + 本地兜底） ─── */
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun buildWebView(): WebView {
@@ -99,11 +109,43 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             allowFileAccess = false
         }
+
+        // 在线内容加载失败时回退到内置资源（每个 WebView 独立标记）
+        var fallbackLoaded = false
+        fun fallbackUrl(remote: String?): String {
+            val q = remote?.substringAfter('?', "")
+            return if (q.isNullOrEmpty()) "$LOCAL_INDEX?native=1" else "$LOCAL_INDEX?$q"
+        }
+
         wv.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError
+            ) {
+                if (request.isForMainFrame && !fallbackLoaded) {
+                    fallbackLoaded = true
+                    view.loadUrl(fallbackUrl(view.url))
+                }
+                super.onReceivedError(view, request, error)
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse
+            ) {
+                if (request.isForMainFrame && !fallbackLoaded) {
+                    fallbackLoaded = true
+                    view.loadUrl(fallbackUrl(view.url))
+                }
+                super.onReceivedHttpError(view, request, errorResponse)
+            }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 if (view === mainWebView) {
@@ -125,16 +167,10 @@ class MainActivity : Activity() {
         fun summon(buddy: String) = runOnUiThread { summonOverlay(buddy) }
 
         @JavascriptInterface
-        fun pet() = runOnUiThread { sendToOverlay("window.__petHappy && window.__petHappy()") }
-
-        @JavascriptInterface
-        fun wave() = runOnUiThread { sendToOverlay("window.__petWave && window.__petWave()") }
-
-        @JavascriptInterface
         fun dismiss() = runOnUiThread { removeOverlay() }
     }
 
-    /* ─── 悬浮宠物窗口 ─── */
+    /* ─── 悬浮宠物窗口（可拖拽） ─── */
 
     private fun summonOverlay(buddy: String) {
         currentBuddy = buddy
@@ -152,24 +188,61 @@ class MainActivity : Activity() {
         if (overlayWebView == null) {
             val wv = buildWebView()
             wv.setBackgroundColor(Color.TRANSPARENT)
+            val winW = dp(300)
+            val winH = dp(360)
+            val metrics = resources.displayMetrics
             val lp = WindowManager.LayoutParams(
-                dp(300), dp(360),
+                winW, winH,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
             )
-            lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            lp.y = dp(20)
+            // 初始位置：屏幕底部居中；之后用户可拖拽（TOP|START 坐标模式）
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.x = (metrics.widthPixels - winW) / 2
+            lp.y = metrics.heightPixels - winH - dp(30)
             windowManager.addView(wv, lp)
+
+            // 拖拽：超过触摸阈值后移动窗口，否则把事件留给页面（点宠物等）
+            val slop = ViewConfiguration.get(this).scaledTouchSlop
+            wv.setOnTouchListener { v, ev ->
+                val oLp = v.layoutParams as WindowManager.LayoutParams
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        dragX = ev.rawX
+                        dragY = ev.rawY
+                        startLx = oLp.x
+                        startLy = oLp.y
+                        dragging = false
+                        false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = ev.rawX - dragX
+                        val dy = ev.rawY - dragY
+                        if (!dragging && Math.abs(dx) < slop && Math.abs(dy) < slop) {
+                            false
+                        } else {
+                            dragging = true
+                            oLp.x = startLx + dx.toInt()
+                            oLp.y = startLy + dy.toInt()
+                            try {
+                                windowManager.updateViewLayout(v, oLp)
+                            } catch (_: Exception) {
+                            }
+                            true
+                        }
+                    }
+                    else -> {
+                        val wasDragging = dragging
+                        dragging = false
+                        wasDragging
+                    }
+                }
+            }
+
             overlayWebView = wv
         }
-        overlayWebView?.loadUrl("$INDEX?native=1&overlay=1&buddy=$buddy")
-    }
-
-    private fun sendToOverlay(js: String) {
-        overlayWebView?.post {
-            overlayWebView?.evaluateJavascript(js, null)
-        }
+        overlayWebView?.loadUrl("$REMOTE_INDEX?native=1&overlay=1&buddy=$buddy")
     }
 
     private fun removeOverlay() {
@@ -239,6 +312,9 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        const val INDEX = "https://appassets.androidplatform.net/assets/www/index.html"
+        // 内容在线地址（改 pet-app 推 GitHub 即自动更新，无需重装 APK）
+        const val REMOTE_INDEX = "https://wangyexuanmega-a11y.github.io/Pokemon-NFC/pet-app/index.html"
+        // 内置资源兜底
+        const val LOCAL_INDEX = "https://appassets.androidplatform.net/assets/www/index.html"
     }
 }
