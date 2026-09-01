@@ -123,7 +123,7 @@ class MainActivity : Activity() {
             for (record in msg.records) {
                 when {
                     record.type.contentEquals(NdefRecord.RTD_URI) -> {
-                        val uri = NdefRecord.createUri(record) ?: continue
+                        val uri = record.toUri() ?: continue
                         val m = Regex("[?&]buddy=([^&#]+)").find(uri.toString())
                         if (m != null) return Uri.decode(m.groupValues[1])
                     }
