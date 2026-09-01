@@ -1,106 +1,177 @@
-/* 主接线：NFC → 弹宠物 → 交互 */
+/* 主接线：宝可梦选择 → 召唤宠物（悬浮窗 / 页面内）→ 交互；NFC 唤醒 */
 
-import { NFCManager, DEFAULT_BUDDY } from './nfc.js';
-import { PikachuPet } from './pikachu.js';
-// 以后换成真实图集时，取消下面注释即可：
-// import { SpriteSheetPlayer } from './spritesheet.js';
+import { NFCManager } from './nfc.js';
+import { Pet } from './pet.js';
 
-/* 宝可梦目录：目前只有皮卡丘有占位美术，其余会先复用皮卡丘形象 */
+/* ─── 宝可梦目录 ───
+ * 加新宝可梦：把透明 PNG 放到 sprites/ 下，然后在这里加一行即可。
+ */
 const BUDDIES = {
-  pikachu: { name: '皮卡丘', type: '电系', tag: '⚡' },
-  bulbasaur: { name: '妙蛙种子', type: '草系', tag: '🌱' },
-  charmander: { name: '小火龙', type: '火系', tag: '🔥' },
-  squirtle: { name: '杰尼龟', type: '水系', tag: '💧' },
+  bulbasaur: { name: '妙蛙种子', type: '草系', image: 'sprites/bulbasaur.png' },
+  ivysaur: { name: '妙蛙草', type: '草系', image: 'sprites/ivysaur.png' },
+  venusaur: { name: '妙蛙花', type: '草系', image: 'sprites/venusaur.png' },
 };
 
+/* 预留空位（以后补充图鉴时直接启用） */
+const RESERVED = ['charmander', 'squirtle', 'pikachu', 'eevee', 'jigglypuff', 'meowth'];
+
+const params = new URLSearchParams(window.location.search);
+const isOverlay = params.has('overlay');
+const isNative = params.has('native');
+
 const canvas = document.getElementById('pet-canvas');
-const tapPrompt = document.getElementById('tap-prompt');
-const infoCard = document.getElementById('info-card');
+const selectionScreen = document.getElementById('selection-screen');
+const controlCard = document.getElementById('control-card');
+const ccName = document.getElementById('cc-name');
 const nfcStatus = document.getElementById('nfc-status');
-const petName = document.getElementById('pet-name');
-const petType = document.getElementById('pet-type');
-const simulateBtn = document.getElementById('simulate-btn');
+const grid = document.getElementById('buddy-grid');
 const petBtn = document.getElementById('pet-btn');
 const waveBtn = document.getElementById('wave-btn');
 const dismissBtn = document.getElementById('dismiss-btn');
+const backBtn = document.getElementById('back-btn');
 
-const pet = new PikachuPet(canvas);
+const pet = new Pet(canvas, {});
+let currentBuddy = null;
 
 function setStatus(text, type = '') {
   nfcStatus.textContent = text;
   nfcStatus.className = 'status ' + type;
 }
 
-function setBuddy(id) {
-  const b = BUDDIES[id] || BUDDIES[DEFAULT_BUDDY];
-  petName.textContent = b.name;
-  petType.textContent = b.type + ' · NFC 伙伴';
+function buddyOf(id) {
+  return BUDDIES[id] || null;
 }
 
-pet.onVisibleChange = (visible) => {
-  tapPrompt.classList.toggle('hidden', visible);
-  infoCard.classList.toggle('hidden', !visible);
-};
+/* ─── 选择界面 ─── */
+function renderSelection() {
+  grid.innerHTML = '';
+  for (const id of Object.keys(BUDDIES)) {
+    const b = BUDDIES[id];
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'buddy-option';
+    btn.innerHTML = '<span class="pokeball"></span><span class="b-name">' + b.name + '</span>';
+    btn.addEventListener('click', () => summon(id));
+    grid.appendChild(btn);
+  }
+  for (let i = 0; i < RESERVED.length; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'buddy-option locked';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="pokeball"></span><span class="b-name">？？？</span>';
+    grid.appendChild(btn);
+  }
+}
 
-function awaken(id) {
-  setBuddy(id);
-  pet.appear();
-  setStatus('已唤醒', 'success');
+/* ─── 召唤 ─── */
+function summon(id) {
+  const b = buddyOf(id);
+  if (!b) return;
+  currentBuddy = id;
+  showControl(b);
+  setStatus('已召唤 ' + b.name, 'success');
+  if (isNative && window.PetBridge) {
+    // App 模式：原生创建悬浮宠物窗口
+    window.PetBridge.summon(id);
+  } else if (!isOverlay) {
+    // 网页模式：直接显示在页面里
+    pet.setImage(b.image);
+    pet.appear();
+  }
+}
+
+function showControl(b) {
+  selectionScreen.classList.add('hidden');
+  controlCard.classList.remove('hidden');
+  ccName.textContent = b.name + ' · ' + b.type;
+}
+
+function backToSelection() {
+  controlCard.classList.add('hidden');
+  selectionScreen.classList.remove('hidden');
 }
 
 /* ─── 交互 ─── */
-petBtn.addEventListener('click', () => pet.happy());
-waveBtn.addEventListener('click', () => pet.wave());
-dismissBtn.addEventListener('click', () => {
-  pet.dismiss();
-  setStatus('已收起 · 再碰一次唤醒', '');
+petBtn.addEventListener('click', () => {
+  if (isNative && window.PetBridge) window.PetBridge.pet();
+  else pet.happy();
 });
+waveBtn.addEventListener('click', () => {
+  if (isNative && window.PetBridge) window.PetBridge.wave();
+  else pet.wave();
+});
+dismissBtn.addEventListener('click', () => {
+  if (isNative && window.PetBridge) window.PetBridge.dismiss();
+  else pet.dismiss();
+  backToSelection();
+  setStatus('已收起', '');
+});
+backBtn.addEventListener('click', backToSelection);
 
+/* 点一下宠物 = 摸摸它（悬浮窗模式里也生效） */
 canvas.addEventListener('pointerdown', (e) => {
-  if (!pet.visible) return;
+  if (!pet.visible || (isNative && !isOverlay)) return;
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   const dx = x - pet.cx;
   const dy = y - pet.cy;
-  if (dx * dx + dy * dy <= (pet.R * 1.5) ** 2) pet.happy();
+  if (dx * dx + dy * dy <= (pet.R * 1.4) ** 2) pet.happy();
 });
 
-/* ─── NFC ─── */
-const nfc = new NFCManager({
-  onAwaken: (id) => awaken(id),
-  onError: () => setStatus('NFC 读取失败', 'error'),
-  onStatus: (s) => {
-    if (s === 'unsupported') setStatus('此设备不支持 Web NFC（桌面可用按钮模拟）', 'warn');
-    else if (s === 'scanning') setStatus('正在扫描 NFC…', '');
-  },
-});
-
-/* ─── 原生 Android App 桥接 ───
- * 在 App（WebView）里，原生代码读到 NFC 标签后调用 window.__petNfc(id)；
- * 页面通过 URL 上的 ?native=1 识别是否运行在 App 内。
- */
+/* ─── 原生桥接（App 内） ─── */
 window.__petNfc = function (id) {
-  awaken(id || DEFAULT_BUDDY);
+  if (isOverlay) return;
+  const b = buddyOf(id);
+  if (!b) {
+    setStatus('未知的宝可梦: ' + id, 'warn');
+    return;
+  }
+  summon(id);
 };
 
-const isNative = new URLSearchParams(window.location.search).has('native');
+/* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
+if (isOverlay) {
+  document.body.classList.add('overlay-mode');
+  const id = params.get('buddy') || 'bulbasaur';
+  const b = buddyOf(id);
+  if (b) {
+    pet.setImage(b.image);
+    pet.appear();
+  }
+  // 供原生控制：摸摸 / 打招呼
+  window.__petHappy = () => pet.happy();
+  window.__petWave = () => pet.wave();
+}
 
-const urlBuddy = nfc.readBuddyFromURL();
-if (urlBuddy) {
-  awaken(urlBuddy);
-} else if (isNative) {
-  // App 模式：由原生 NFC 驱动；保留模拟按钮方便无标签测试
-  setStatus('等待 NFC 标签…', '');
-  simulateBtn.classList.remove('hidden');
-  simulateBtn.addEventListener('click', () => awaken(DEFAULT_BUDDY));
-} else {
-  nfc.startScan().then((ok) => {
-    if (!ok && !nfc.isSupported()) {
-      simulateBtn.classList.remove('hidden');
-      simulateBtn.addEventListener('click', () => awaken(DEFAULT_BUDDY));
-    }
+/* ─── NFC ─── */
+if (!isOverlay) {
+  renderSelection();
+  const nfc = new NFCManager({
+    onAwaken: (id) => window.__petNfc(id),
+    onError: () => setStatus('NFC 读取失败', 'error'),
+    onStatus: (s) => {
+      if (s === 'unsupported') {
+        setStatus(isNative ? '等待 NFC 标签…' : '当前设备不支持 Web NFC', 'warn');
+      } else if (s === 'scanning') {
+        setStatus('正在扫描 NFC…', '');
+      }
+    },
   });
+
+  if (isNative) {
+    // App 模式：由原生 NFC 驱动
+    setStatus('等待 NFC 标签…', '');
+  } else {
+    // 网页模式：URL 参数或 Web NFC 常驻扫描
+    const urlBuddy = nfc.readBuddyFromURL();
+    if (urlBuddy) {
+      window.__petNfc(urlBuddy);
+    } else {
+      nfc.startScan();
+    }
+  }
 }
 
 /* ─── 渲染循环 ─── */
