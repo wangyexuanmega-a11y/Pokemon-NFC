@@ -63,6 +63,13 @@ export class Pet {
     this.contentBox = null; // 不透明内容边界 {x,y,w,h}
     this.imageFailed = false;
     this.pixelated = false;
+    this.mode = 'image'; // image | frames
+    this.frameCount = 1;
+    this.fps = 10;
+    this.animT = 0;
+    this.frame = 0;
+    this.frameW = 0;
+    this.frameH = 0;
     this.fixedSize = !!opts.fixedSize; // 悬浮窗模式：宠物固定尺寸
     this.size = opts.size || 90;
 
@@ -127,6 +134,62 @@ export class Pet {
     img.src = src;
   }
 
+  /** 帧动画素材：图带（帧横向排列）+ 帧数/fps */
+  setFrames(src, cfg) {
+    this.mode = 'frames';
+    this.pixelated = true; // 像素素材最近邻缩放
+    this.image = null;
+    this.contentBox = null;
+    this.imageFailed = false;
+    this.frameCount = (cfg && cfg.frames) || 2;
+    this.fps = (cfg && cfg.fps) || 10;
+    this.animT = 0;
+    this.frame = 0;
+    this.frameW = 0;
+    this.frameH = 0;
+    const img = new Image();
+    img.onload = () => {
+      this.frameW = img.naturalWidth / this.frameCount;
+      this.frameH = img.naturalHeight;
+      // 各帧内容边界取并集（用于悬浮窗贴合尺寸）
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const cc = c.getContext('2d', { willReadFrequently: true });
+        cc.drawImage(img, 0, 0);
+        const data = cc.getImageData(0, 0, c.width, c.height).data;
+        const fw = Math.round(this.frameW);
+        const fh = Math.round(this.frameH);
+        let minX = fw, minY = fh, maxX = 0, maxY = 0;
+        for (let f = 0; f < this.frameCount; f++) {
+          const ox = f * fw;
+          for (let y = 0; y < fh; y++) {
+            for (let x = 0; x < fw; x++) {
+              if (data[((y * c.width) + ox + x) * 4 + 3] > 24) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+        }
+        if (maxX >= minX && maxY >= minY) {
+          this.contentBox = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+        }
+      } catch (e) { /* ignore */ }
+      this.image = img;
+      // 图片就绪时若正在出场，重播出场动画（避免闪现空白/旧素材）
+      if (this.state === 'appearing') this.stateT = 0;
+      if (this.onImageReady) this.onImageReady();
+    };
+    img.onerror = () => {
+      this.imageFailed = true;
+    };
+    img.src = src;
+  }
+
   appear() {
     this.state = 'appearing';
     this.stateT = 0;
@@ -151,6 +214,12 @@ export class Pet {
       this.state = 'hidden';
       this.visible = false;
       if (this.onVisibleChange) this.onVisibleChange(false);
+    }
+
+    // 帧动画推进
+    if (this.mode === 'frames' && this.image && this.frameCount > 1) {
+      this.animT += dt;
+      this.frame = Math.floor(this.animT * this.fps) % this.frameCount;
     }
   }
 
@@ -229,12 +298,31 @@ export class Pet {
   _drawImage(ctx, p) {
     const cb = this.contentBox;
     const targetH = 1.6 * (1 + p.breath);
-    const aspect = cb.w / cb.h;
-    const dw = targetH * aspect;
+    const scale = targetH / cb.h;
     // 像素素材用最近邻（锐利），高清素材用平滑
     ctx.imageSmoothingEnabled = !this.pixelated;
-    // 底部对齐（脚踩在地面）
-    ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -targetH, dw, targetH);
+    if (this.mode === 'frames') {
+      const sx = Math.round(this.frame * this.frameW);
+      const fw = Math.round(this.frameW);
+      const fh = Math.round(this.frameH);
+      const dw = fw * scale;
+      const dh = fh * scale;
+      // 底部对齐（脚踩在地面）
+      ctx.drawImage(this.image, sx, 0, fw, fh, -dw / 2, -dh, dw, dh);
+    } else {
+      const dw = cb.w * scale;
+      const dh = targetH;
+      ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -dh, dw, dh);
+    }
     ctx.imageSmoothingEnabled = true;
+  }
+
+  /** 宠物显示尺寸（px），悬浮窗贴合用 */
+  getDisplaySize() {
+    const cb = this.contentBox;
+    if (!cb) return null;
+    const targetH = 1.6 * this.R;
+    const scale = targetH / cb.h;
+    return { w: cb.w * scale, h: targetH };
   }
 }

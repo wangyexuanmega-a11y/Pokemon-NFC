@@ -7,11 +7,16 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.net.Uri
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
@@ -51,6 +56,14 @@ class MainActivity : Activity() {
     private var startLy = 0
     private var dragging = false
 
+    // 步数（硬件计步传感器，为进化系统积累数据）
+    private var sensorManager: SensorManager? = null
+    private var stepCounter: Sensor? = null
+    private var lastSensorSteps = 0f
+    private var lastPushMs = 0L
+    private var lastPushedTotal = -1L
+    private val prefs by lazy { getSharedPreferences("pet_steps", MODE_PRIVATE) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -89,6 +102,9 @@ class MainActivity : Activity() {
             )
             adapter.enableForegroundDispatch(this, pendingIntent, filters, null)
         }
+        // 步数传感器
+        initStepCounter()
+        sensorManager?.registerListener(stepListener, stepCounter, SensorManager.SENSOR_DELAY_NORMAL)
         // 从系统设置页开完权限回来，自动补召唤
         val buddy = currentBuddy
         if (buddy != null && Settings.canDrawOverlays(this) && overlayWebView == null) {
@@ -98,6 +114,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        sensorManager?.unregisterListener(stepListener)
         nfcAdapter?.disableForegroundDispatch(this)
     }
 
@@ -204,6 +221,56 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun dismiss() = runOnUiThread { removeOverlay() }
+
+        /** 累计步数（进化系统用） */
+        @JavascriptInterface
+        fun getTotalSteps(): Long = prefs.getLong("total", 0L)
+    }
+
+    /* ─── 步数统计 ───
+     * 硬件计步器（SENSOR_STEP_COUNTER）开机后持续累计，App 每次打开读取增量；
+     * 步数持久化在 SharedPreferences，供进化系统兑换经验。
+     */
+    private fun initStepCounter() {
+        if (sensorManager == null) {
+            sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+            stepCounter = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+            lastSensorSteps = prefs.getFloat("last", 0f)
+        }
+    }
+
+    private val stepListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            val cur = event.values[0]
+            val delta = cur - lastSensorSteps
+            var total = prefs.getLong("total", 0L)
+            when {
+                delta < 0 -> {
+                    // 手机重启过（计数清零）：把重启后已走的步数算上
+                    total += cur.toLong()
+                }
+                delta >= 1 && delta < 50000 -> {
+                    total += delta.toLong()
+                }
+            }
+            lastSensorSteps = cur
+            prefs.edit().putFloat("last", cur).putLong("total", total).apply()
+            // 推送页面（限频：最多每秒一次）
+            val now = SystemClock.elapsedRealtime()
+            if (total != lastPushedTotal && now - lastPushMs >= 1000) {
+                lastPushMs = now
+                lastPushedTotal = total
+                pushSteps(total)
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    private fun pushSteps(total: Long) {
+        mainWebView.post {
+            mainWebView.evaluateJavascript("window.__petSteps && window.__petSteps($total)", null)
+        }
     }
 
     /* ─── 悬浮宠物窗口（可拖拽） ─── */

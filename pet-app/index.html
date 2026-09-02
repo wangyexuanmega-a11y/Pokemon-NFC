@@ -15,20 +15,20 @@
   <!-- 顶部状态栏 -->
   <header id="top-bar">
     <div class="logo"><span class="logo-bolt">⚡</span> NFC 宠物</div>
-    <div id="nfc-status" class="status">初始化…</div>
+    <div class="top-right">
+      <div id="steps-badge" class="steps hidden">🚶 <span id="steps-count">0</span></div>
+      <div id="nfc-status" class="status">初始化…</div>
+    </div>
   </header>
 
-  <!-- 宝可梦选择界面 -->
+  <!-- 宝可梦图鉴选择界面 -->
   <div id="selection-screen">
     <div class="ss-head">
       <div class="ss-title">选择你的伙伴</div>
-      <div class="variant-toggle">
-        <button id="variant-hd" class="vt-btn active" type="button">高清版</button>
-        <button id="variant-pixel" class="vt-btn" type="button">像素版</button>
-      </div>
+      <input id="search-input" type="search" placeholder="搜索名称 / 编号" autocomplete="off">
     </div>
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后会以悬浮宠物出现在屏幕上（可拖拽位置）<br>碰一下 NFC 手环也能直接唤醒</p>
+    <p class="ss-hint">选择后会以悬浮宠物出现在屏幕上（可拖拽）<br>碰一下 NFC 手环也能直接唤醒</p>
   </div>
 
   <!-- 控制卡片 -->
