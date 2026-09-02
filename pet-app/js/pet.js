@@ -50,6 +50,10 @@ export class Pet {
     this.fixedSize = !!opts.fixedSize; // 悬浮窗模式：宠物固定尺寸
     this.size = opts.size || 90;
     this.scaleFactor = 1; // 用户缩放（初始界面滑块调节，持久保存）
+    this.groundAt = opts.groundAt || 0.5; // 脚底在画布高度的比例（0.5 = 居中）
+    this.fitAboveGround = !!opts.fitAboveGround; // 缩放时限制不超出画布
+    this.groundY = 0; // 脚底位置（resize 时算）
+    this.maxHeight = Infinity; // 最大显示高度（px）
 
     if (opts.image) this.setImage(opts.image, !!opts.pixelated);
 
@@ -66,6 +70,8 @@ export class Pet {
     this.cx = this.w / 2;
     this.cy = this.h / 2;
     this.R = this.fixedSize ? this.size : Math.min(this.w, this.h) * 0.26;
+    this.groundY = this.h * this.groundAt;
+    this.maxHeight = this.fitAboveGround ? Math.max(30, this.groundY - 4) : Infinity;
   }
 
   /** 更换宠物图片；pixelated = true 时用最近邻缩放（像素素材保持锐利） */
@@ -239,7 +245,7 @@ export class Pet {
     if (!(this.image && this.contentBox)) return;
 
     const R = this.R;
-    const petY = this.cy + p.bob * R;
+    const petY = this.groundY + p.bob * R;
 
     // 宠物本体（锚点在脚底）
     ctx.save();
@@ -260,7 +266,8 @@ export class Pet {
 
   _drawImage(ctx, p) {
     const cb = this.contentBox;
-    const targetH = 1.6 * (1 + p.breath) * this.scaleFactor;
+    // 限制最大高度，保证缩放后不出画布
+    const targetH = Math.min(1.6 * (1 + p.breath) * this.scaleFactor, this.maxHeight / this.R);
     const scale = targetH / cb.h;
     // 像素素材用最近邻（锐利），高清素材用平滑
     ctx.imageSmoothingEnabled = !this.pixelated;
@@ -284,7 +291,7 @@ export class Pet {
   getDisplaySize() {
     const cb = this.contentBox;
     if (!cb) return null;
-    const targetH = 1.6 * this.R * this.scaleFactor;
+    const targetH = Math.min(1.6 * this.R * this.scaleFactor, this.maxHeight);
     const scale = targetH / cb.h;
     return { w: cb.w * scale, h: targetH };
   }
@@ -293,7 +300,7 @@ export class Pet {
   getFrameBox() {
     const cb = this.contentBox;
     if (!cb) return null;
-    const targetH = 1.6 * this.R * this.scaleFactor;
+    const targetH = Math.min(1.6 * this.R * this.scaleFactor, this.maxHeight);
     const s = targetH / cb.h;
     if (this.mode === 'frames') {
       return { w: this.frameW * s, h: this.frameH * s };

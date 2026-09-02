@@ -1,4 +1,5 @@
-/* 主接线：图鉴选择 → 平台展示（可缩放，大小持久）→ 悬浮宠物（App）；NFC 唤醒；步数 */
+/* 主接线：图鉴选择 → 平台展示（可缩放持久）→ 悬浮宠物（App）；NFC 唤醒；
+ * 养成：步数(传感器) → 兑换神奇糖果 → 升级/进化 */
 
 import { NFCManager } from './nfc.js';
 import { Pet } from './pet.js';
@@ -13,26 +14,37 @@ const stageCanvas = document.getElementById('stage-canvas'); // 初始界面平�
 const selectionScreen = document.getElementById('selection-screen');
 const controlCard = document.getElementById('control-card');
 const ccName = document.getElementById('cc-name');
+const ccLevel = document.getElementById('cc-level');
 const nfcStatus = document.getElementById('nfc-status');
 const grid = document.getElementById('buddy-grid');
 const searchInput = document.getElementById('search-input');
 const dismissBtn = document.getElementById('dismiss-btn');
 const backBtn = document.getElementById('back-btn');
+const levelupBtn = document.getElementById('levelup-btn');
+const evolveBtn = document.getElementById('evolve-btn');
 const stepsBadge = document.getElementById('steps-badge');
 const stepsCount = document.getElementById('steps-count');
+const candyCount = document.getElementById('candy-count');
+const stepsLeftEl = document.getElementById('steps-left');
+const exchangeBtn = document.getElementById('exchange-btn');
 const scaleSlider = document.getElementById('scale-slider');
 const scaleValue = document.getElementById('scale-value');
 const closeAppBtn = document.getElementById('close-app-btn');
 const overlayClose = document.getElementById('overlay-close');
 
 const pet = new Pet(canvas, {}); // 悬浮窗宠物
-const stagePet = new Pet(stageCanvas, { fixedSize: true, size: 46 }); // 平台宠物
+const stagePet = new Pet(stageCanvas, {
+  fixedSize: true,
+  size: 46,
+  groundAt: 0.85, // 脚踩平台
+  fitAboveGround: true, // 缩放不超出舞台
+});
 let currentBuddy = null; // dex 编号
 
-/* ─── 大小缩放（持久保存） ─── */
+/* ─── 大小缩放（持久保存；平台内不超界） ─── */
 let scale = 1;
 try { scale = parseFloat(localStorage.getItem('petScale')) || 1; } catch (e) { /* ignore */ }
-scale = Math.min(2, Math.max(0.5, scale));
+scale = Math.min(1.85, Math.max(0.5, scale));
 stagePet.scaleFactor = scale;
 pet.scaleFactor = scale;
 
@@ -47,17 +59,45 @@ scaleSlider.addEventListener('input', () => {
 });
 scaleSlider.addEventListener('change', () => {
   try { localStorage.setItem('petScale', String(scale)); } catch (e) { /* ignore */ }
-  // App 模式：悬浮宠物按新大小重载（回桌面后生效）
   if (isNative && currentBuddy && window.PetBridge) window.PetBridge.reloadOverlay();
 });
 
-function setStatus(text, type = '') {
-  nfcStatus.textContent = text;
-  nfcStatus.className = 'status ' + type;
-}
+/* ─── 钱包：步数 → 神奇糖果 ─── */
+const CANDY_RATE = 500; // 步数兑换一颗糖果
+const LEVEL_COST = 1; // 升级消耗糖果
+const EVOLVE_COST = 5; // 进化消耗糖果
+const EVO_LEVEL_STAGE1 = 10; // 第一段进化等级
+const EVO_LEVEL_STAGE2 = 20; // 第二段进化等级
 
-/* ─── 步数（App 内硬件计步，为进化系统积累数据） ─── */
 let totalSteps = 0;
+let candies = 0;
+let stepsSpent = 0;
+try { candies = parseInt(localStorage.getItem('petCandies'), 10) || 0; } catch (e) { /* ignore */ }
+try { stepsSpent = parseInt(localStorage.getItem('petStepsSpent'), 10) || 0; } catch (e) { /* ignore */ }
+
+function saveWallet() {
+  try {
+    localStorage.setItem('petCandies', String(candies));
+    localStorage.setItem('petStepsSpent', String(stepsSpent));
+  } catch (e) { /* ignore */ }
+}
+function loadLevels() {
+  try { return JSON.parse(localStorage.getItem('petLevels') || '{}'); } catch (e) { return {}; }
+}
+function saveLevels(m) {
+  try { localStorage.setItem('petLevels', JSON.stringify(m)); } catch (e) { /* ignore */ }
+}
+function getLevel(dex) {
+  const m = loadLevels();
+  return m[dex] || 1;
+}
+function setLevel(dex, lv) {
+  const m = loadLevels();
+  m[dex] = lv;
+  saveLevels(m);
+}
+const stepsLeft = () => Math.max(0, totalSteps - stepsSpent);
+
 function updateStepsUI() {
   if (!isNative) return;
   stepsBadge.classList.remove('hidden');
@@ -67,12 +107,98 @@ function refreshSteps() {
   if (isNative && window.PetBridge && typeof window.PetBridge.getTotalSteps === 'function') {
     totalSteps = Number(window.PetBridge.getTotalSteps() || 0);
     updateStepsUI();
+    updateResourceUI();
   }
 }
 window.__petSteps = function (n) {
   totalSteps = Number(n || 0);
   updateStepsUI();
+  updateResourceUI();
 };
+
+/* ─── 资源/升级/进化 UI ─── */
+function updateResourceUI() {
+  candyCount.textContent = String(candies);
+  if (isNative) {
+    stepsLeftEl.textContent = stepsLeft().toLocaleString();
+  } else {
+    stepsLeftEl.textContent = '—';
+  }
+  exchangeBtn.disabled = !isNative || stepsLeft() < CANDY_RATE;
+  // 控制卡信息
+  if (currentBuddy) {
+    const b = findBuddy(currentBuddy);
+    if (b) {
+      const lv = getLevel(b.dex);
+      ccLevel.textContent = 'Lv.' + lv;
+      const evo = evoInfo(b.dex);
+      if (evo && lv >= evo.needLv) {
+        evolveBtn.classList.remove('hidden');
+        evolveBtn.textContent = '进化→' + evo.next.name + ' (' + EVOLVE_COST + '🍬)';
+      } else {
+        evolveBtn.classList.add('hidden');
+      }
+    }
+  }
+}
+
+function evoInfo(dex) {
+  const b = findBuddy(dex);
+  if (!b || !b.next) return null;
+  const nxt = findBuddy(b.next);
+  if (!nxt) return null;
+  // 下一段还有进化 = 三段线，当前是第一段；否则当前是第二段
+  const needLv = nxt.next ? EVO_LEVEL_STAGE1 : EVO_LEVEL_STAGE2;
+  return { next: nxt, needLv: needLv };
+}
+
+exchangeBtn.addEventListener('click', () => {
+  if (!isNative) return;
+  if (stepsLeft() < CANDY_RATE) {
+    setStatus('步数不足，先走走再回来~', 'warn');
+    return;
+  }
+  stepsSpent += CANDY_RATE;
+  candies += 1;
+  saveWallet();
+  updateResourceUI();
+  setStatus('获得 1 颗神奇糖果！', 'success');
+});
+
+levelupBtn.addEventListener('click', () => {
+  if (!currentBuddy) return;
+  if (candies < LEVEL_COST) {
+    setStatus('糖果不足，先用步数兑换（' + CANDY_RATE + '步/颗）', 'warn');
+    return;
+  }
+  candies -= LEVEL_COST;
+  setLevel(currentBuddy, getLevel(currentBuddy) + 1);
+  saveWallet();
+  updateResourceUI();
+  setStatus('升级成功！' + findBuddy(currentBuddy).name + ' Lv.' + getLevel(currentBuddy), 'success');
+});
+
+evolveBtn.addEventListener('click', () => {
+  if (!currentBuddy) return;
+  const b = findBuddy(currentBuddy);
+  const evo = evoInfo(currentBuddy);
+  if (!b || !evo) return;
+  const lv = getLevel(b.dex);
+  if (lv < evo.needLv || candies < EVOLVE_COST) {
+    setStatus('进化条件不足（Lv.' + evo.needLv + ' + ' + EVOLVE_COST + '🍬）', 'warn');
+    return;
+  }
+  candies -= EVOLVE_COST;
+  setLevel(evo.next.dex, Math.max(getLevel(evo.next.dex), lv));
+  saveWallet();
+  setStatus('进化成功！' + b.name + ' → ' + evo.next.name + '！', 'success');
+  summon(evo.next.dex);
+});
+
+function setStatus(text, type = '') {
+  nfcStatus.textContent = text;
+  nfcStatus.className = 'status ' + type;
+}
 
 /* ─── 图鉴网格 ─── */
 function renderGrid(filter = '') {
@@ -119,9 +245,10 @@ function summon(id) {
   currentBuddy = b.dex;
   preview(b);
   showControl(b);
+  updateResourceUI();
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    // App 模式：悬浮宠物（App 前台时隐藏，回桌面显示；大小用保存的缩放值）
+    // App 模式：悬浮宠物（App 前台时隐藏，回桌面显示）
     window.PetBridge.summon(String(b.dex));
   }
 }
@@ -143,6 +270,7 @@ dismissBtn.addEventListener('click', () => {
   if (isNative && window.PetBridge) window.PetBridge.dismiss();
   else stagePet.dismiss();
   backToSelection();
+  updateResourceUI();
   setStatus('已收起', '');
 });
 backBtn.addEventListener('click', backToSelection);
@@ -217,6 +345,7 @@ if (isOverlay) {
 if (!isOverlay) {
   renderGrid();
   applyScaleUI();
+  updateResourceUI();
   const first = BUDDIES['1'];
   if (first) preview(first); // 平台默认展示 1 号
 

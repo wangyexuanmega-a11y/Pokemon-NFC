@@ -35,18 +35,30 @@
     </div>
     <div id="scale-row">
       <span class="scale-label">大小</span>
-      <input id="scale-slider" type="range" min="50" max="200" step="5" value="100">
+      <input id="scale-slider" type="range" min="50" max="185" step="5" value="100">
       <span class="scale-value" id="scale-value">100%</span>
     </div>
 
+    <!-- 步数 → 神奇糖果 -->
+    <div id="resource-row">
+      <span class="res-item res-candy"><img src="sprites/item/rare-candy.png" class="res-ico" alt="糖果"> <b id="candy-count">0</b></span>
+      <span class="res-item">剩余步数 <b id="steps-left">0</b></span>
+      <button id="exchange-btn" type="button">换糖果</button>
+    </div>
+
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒</p>
+    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒<br>走路攒步数 → 兑换神奇糖果 → 升级进化！</p>
   </div>
 
   <!-- 控制卡片 -->
   <div id="control-card" class="hidden">
-    <div class="cc-name" id="cc-name">妙蛙种子</div>
+    <div class="cc-line">
+      <div class="cc-name" id="cc-name">妙蛙种子 · No.001</div>
+      <div class="cc-level" id="cc-level">Lv.1</div>
+    </div>
     <div class="cc-actions">
+      <button id="levelup-btn" type="button">升级（1🍬）</button>
+      <button id="evolve-btn" type="button" class="hidden">进化</button>
       <button id="dismiss-btn" type="button">收起宠物</button>
       <button id="back-btn" type="button" class="secondary">换一只</button>
     </div>

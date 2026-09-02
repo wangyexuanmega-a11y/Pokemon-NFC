@@ -249,6 +249,51 @@ body.overlay-mode .overlay-close { display: flex; }
 #scale-slider { flex: 1; max-width: 180px; accent-color: var(--green); }
 .scale-value { font-size: 12.5px; color: var(--green); min-width: 42px; text-align: right; }
 
+/* 步数 → 神奇糖果 */
+#resource-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 14px;
+  width: min(88vw, 340px);
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+}
+.res-item {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.res-item b { color: var(--text); }
+.res-candy b { color: #ffd34d; font-size: 14px; }
+.res-ico {
+  width: 18px; height: 18px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+#exchange-btn {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,211,77,.4);
+  background: rgba(255,211,77,.12);
+  color: #ffd34d;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#exchange-btn:active { background: rgba(255,211,77,.22); }
+#exchange-btn:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
 #buddy-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -357,10 +402,26 @@ body.overlay-mode .overlay-close { display: flex; }
   to { transform: translateY(0); opacity: 1; }
 }
 
+.cc-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .cc-name {
   font-size: 17px;
   font-weight: 700;
-  margin-bottom: 12px;
+}
+.cc-level {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(126,208,126,.12);
+  border: 1px solid rgba(126,208,126,.3);
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .cc-actions {

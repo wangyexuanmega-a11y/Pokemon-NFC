@@ -63,8 +63,9 @@ for ($n = $Start; $n -le $End; $n++) {
 Write-Host "=== extracted $($entries.Count) / $Start..$End ==="
 if ($missing.Count -gt 0) { Write-Host "MISSING: $($missing -join ',')" }
 
-# --- 2. Chinese names from PokéAPI ---
+# --- 2. Chinese names + evolution from PokéAPI ---
 $names = @{}
+$evoFrom = @{}
 if (-not $SkipNames) {
   foreach ($n in ($Start..$End)) {
     try {
@@ -73,12 +74,29 @@ if (-not $SkipNames) {
       $en = $spec.names | Where-Object { $_.language.name -eq 'en' } | Select-Object -First 1
       $zhName = if ($zh) { $zh.name } else { $en.name }
       $names["$n"] = @{ zh = $zhName; en = $en.name }
+      if ($spec.evolves_from_species -and $spec.evolves_from_species.url) {
+        $m = [regex]::Match($spec.evolves_from_species.url, '/pokemon-species/(\d+)/')
+        if ($m.Success) { $evoFrom["$n"] = [int]$m.Groups[1].Value }
+      }
     } catch {
       $names["$n"] = @{ zh = "No.$n"; en = "No.$n" }
     }
     Start-Sleep -Milliseconds 120
   }
   Write-Host "=== names fetched: $($names.Count) ==="
+
+  # 进化链：nextOf[x] = 1..151 中由 x 进化来的最小编号（范围内取最小的那个）
+  $nextOf = @{}
+  for ($j = $Start; $j -le $End; $j++) {
+    if ($evoFrom.ContainsKey("$j")) {
+      $from = $evoFrom["$j"]
+      if ($from -ge $Start -and $from -le $End) {
+        if (-not $nextOf.ContainsKey("$from") -or $j -lt $nextOf["$from"]) {
+          $nextOf["$from"] = $j
+        }
+      }
+    }
+  }
 }
 
 # --- 3. generate js/buddies.js ---
@@ -92,7 +110,9 @@ if (-not $SkipNames) {
     $nm = $names["$n"]
     $zhName = $nm.zh.Replace('"', '')
     $enName = $nm.en.Replace('"', '')
-    $line = '  "' + $n + '": { dex: ' + $n + ', name: "' + $zhName + '", en: "' + $enName + '", frames: ' + $e.frames + ', fps: ' + $e.fps + ', w: ' + $e.w + ', h: ' + $e.h + ' },'
+    $line = '  "' + $n + '": { dex: ' + $n + ', name: "' + $zhName + '", en: "' + $enName + '", frames: ' + $e.frames + ', fps: ' + $e.fps + ', w: ' + $e.w + ', h: ' + $e.h
+    if ($nextOf.ContainsKey("$n")) { $line += ', next: ' + $nextOf["$n"] }
+    $line += ' },'
     [void]$sb.AppendLine($line)
   }
   [void]$sb.AppendLine('};')
