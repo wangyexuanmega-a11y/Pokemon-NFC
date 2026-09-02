@@ -1,5 +1,5 @@
 /* 主接线：图鉴选择 → 平台展示（可缩放持久）→ 悬浮宠物（App）；NFC 唤醒；
- * 养成：步数(传感器) → 兑换神奇糖果 → 升级/进化 */
+ * 养成：步数(传感器) → 兑换神奇糖果 → 升级/进化；长按宠物收起；训练家账号 */
 
 import { NFCManager } from './nfc.js';
 import { Pet } from './pet.js';
@@ -15,6 +15,7 @@ const selectionScreen = document.getElementById('selection-screen');
 const controlCard = document.getElementById('control-card');
 const ccName = document.getElementById('cc-name');
 const ccLevel = document.getElementById('cc-level');
+const ccCandy = document.getElementById('cc-candy');
 const nfcStatus = document.getElementById('nfc-status');
 const grid = document.getElementById('buddy-grid');
 const searchInput = document.getElementById('search-input');
@@ -30,7 +31,20 @@ const exchangeBtn = document.getElementById('exchange-btn');
 const scaleSlider = document.getElementById('scale-slider');
 const scaleValue = document.getElementById('scale-value');
 const closeAppBtn = document.getElementById('close-app-btn');
-const overlayClose = document.getElementById('overlay-close');
+const trainerBar = document.getElementById('trainer-bar');
+const trainerNameEl = document.getElementById('trainer-name');
+const todayStepsEl = document.getElementById('today-steps');
+const trainerModal = document.getElementById('trainer-modal');
+const tmClose = document.getElementById('tm-close');
+const tmName = document.getElementById('tm-name');
+const tmId = document.getElementById('tm-id');
+const tmDate = document.getElementById('tm-date');
+const tmTotal = document.getElementById('tm-total');
+const tmToday = document.getElementById('tm-today');
+const tmCandy = document.getElementById('tm-candy');
+const tmSave = document.getElementById('tm-save');
+const wechatBtn = document.getElementById('wechat-btn');
+const wechatNote = document.getElementById('wechat-note');
 
 const pet = new Pet(canvas, {}); // 悬浮窗宠物
 const stagePet = new Pet(stageCanvas, {
@@ -98,34 +112,111 @@ function setLevel(dex, lv) {
 }
 const stepsLeft = () => Math.max(0, totalSteps - stepsSpent);
 
+/* ─── 训练家账号（本地档案；微信登录待开放平台资质后接入） ─── */
+let trainer = null;
+try { trainer = JSON.parse(localStorage.getItem('petTrainer') || 'null'); } catch (e) { trainer = null; }
+if (!trainer || !trainer.id) {
+  const id = Math.floor(100000 + Math.random() * 900000);
+  trainer = {
+    id: id,
+    name: '训练家' + String(id).slice(0, 4),
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+  try { localStorage.setItem('petTrainer', JSON.stringify(trainer)); } catch (e) { /* ignore */ }
+}
+function saveTrainer() {
+  try { localStorage.setItem('petTrainer', JSON.stringify(trainer)); } catch (e) { /* ignore */ }
+}
+function updateTrainerUI() {
+  trainerNameEl.textContent = trainer.name;
+  todayStepsEl.textContent = todaySteps().toLocaleString();
+}
+
+/* ─── 每日步数（跨日自动结算：前一天计入累计，当日重新起算） ─── */
+let dayKey = '';
+let dayBase = 0;
+try {
+  dayKey = localStorage.getItem('petDayKey') || '';
+  dayBase = parseInt(localStorage.getItem('petDayBase'), 10) || 0;
+} catch (e) { /* ignore */ }
+function rollDay() {
+  const today = new Date().toDateString();
+  if (today !== dayKey) {
+    dayKey = today;
+    dayBase = totalSteps;
+    try {
+      localStorage.setItem('petDayKey', dayKey);
+      localStorage.setItem('petDayBase', String(dayBase));
+    } catch (e) { /* ignore */ }
+  }
+}
+function todaySteps() {
+  return Math.max(0, totalSteps - dayBase);
+}
+
+/* ─── 我的账号弹窗 ─── */
+function openTrainerModal() {
+  tmName.value = trainer.name;
+  tmId.textContent = '#' + String(trainer.id).padStart(6, '0');
+  tmDate.textContent = trainer.createdAt;
+  tmTotal.textContent = totalSteps.toLocaleString();
+  tmToday.textContent = todaySteps().toLocaleString();
+  tmCandy.textContent = String(candies);
+  trainerModal.classList.remove('hidden');
+}
+function closeTrainerModal() {
+  trainerModal.classList.add('hidden');
+}
+trainerBar.addEventListener('click', openTrainerModal);
+tmClose.addEventListener('click', closeTrainerModal);
+trainerModal.addEventListener('click', (e) => {
+  if (e.target === trainerModal) closeTrainerModal();
+});
+tmSave.addEventListener('click', () => {
+  const v = tmName.value.trim();
+  if (v) {
+    trainer.name = v.slice(0, 12);
+    saveTrainer();
+    updateTrainerUI();
+  }
+  closeTrainerModal();
+});
+wechatBtn.addEventListener('click', () => {
+  wechatNote.classList.toggle('hidden');
+});
+
+/* ─── 步数刷新 ─── */
 function updateStepsUI() {
   if (!isNative) return;
   stepsBadge.classList.remove('hidden');
   stepsCount.textContent = totalSteps.toLocaleString();
 }
 function refreshSteps() {
+  rollDay();
   if (isNative && window.PetBridge && typeof window.PetBridge.getTotalSteps === 'function') {
     totalSteps = Number(window.PetBridge.getTotalSteps() || 0);
     updateStepsUI();
     updateResourceUI();
+    updateTrainerUI();
   }
 }
 window.__petSteps = function (n) {
   totalSteps = Number(n || 0);
   updateStepsUI();
   updateResourceUI();
+  updateTrainerUI();
 };
 
 /* ─── 资源/升级/进化 UI ─── */
 function updateResourceUI() {
   candyCount.textContent = String(candies);
+  if (ccCandy) ccCandy.textContent = '🍬 ' + candies;
   if (isNative) {
     stepsLeftEl.textContent = stepsLeft().toLocaleString();
   } else {
     stepsLeftEl.textContent = '—';
   }
   exchangeBtn.disabled = !isNative || stepsLeft() < CANDY_RATE;
-  // 控制卡信息
   if (currentBuddy) {
     const b = findBuddy(currentBuddy);
     if (b) {
@@ -147,7 +238,6 @@ function evoInfo(dex) {
   if (!b || !b.next) return null;
   const nxt = findBuddy(b.next);
   if (!nxt) return null;
-  // 下一段还有进化 = 三段线，当前是第一段；否则当前是第二段
   const needLv = nxt.next ? EVO_LEVEL_STAGE1 : EVO_LEVEL_STAGE2;
   return { next: nxt, needLv: needLv };
 }
@@ -162,6 +252,7 @@ exchangeBtn.addEventListener('click', () => {
   candies += 1;
   saveWallet();
   updateResourceUI();
+  updateTrainerUI();
   setStatus('获得 1 颗神奇糖果！', 'success');
 });
 
@@ -248,7 +339,6 @@ function summon(id) {
   updateResourceUI();
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    // App 模式：悬浮宠物（App 前台时隐藏，回桌面显示）
     window.PetBridge.summon(String(b.dex));
   }
 }
@@ -288,21 +378,22 @@ window.__petNfc = function (id) {
 
 /* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
 
-/** 把宠物完整帧格的范围告诉原生 → 原生把窗口贴合宠物（不裁剪动画边缘，缩小触摸影响区） */
+/** 把宠物完整帧格的范围告诉原生 → 原生把窗口贴合宠物（留足余量，任意缩放都不裁剪） */
 function reportPetBounds() {
   if (!isOverlay || !window.PetBridge) return;
   const box = pet.getFrameBox();
   if (!box) return;
   const R = pet.R;
-  const pad = R * 0.12;
-  const left = pet.cx - box.w / 2 - pad;
-  const top = pet.cy - box.h - R * 0.08 - pad;
-  const w = box.w + pad * 2;
-  const h = box.h + pad * 2 + R * 0.25;
+  const padX = Math.max(box.w * 0.22, R * 0.4); // 宽裕的水平余量
+  const padY = Math.max(box.h * 0.18, R * 0.5); // 垂直余量（动画浮动/头顶）
+  const left = pet.cx - box.w / 2 - padX;
+  const top = pet.cy - box.h - padY;
+  const w = box.w + padX * 2;
+  const h = box.h + padY + R * 0.55;
   window.PetBridge.setPetBounds(Math.round(left), Math.round(top), Math.round(w), Math.round(h));
 }
 
-/** 触摸点是否在宝可梦本体上（决定拖拽是否生效） */
+/** 触摸点是否在宝可梦本体上（决定拖拽/长按是否生效） */
 function pointOnPet(x, y) {
   const s = pet.getDisplaySize();
   if (!s) return false;
@@ -311,8 +402,40 @@ function pointOnPet(x, y) {
   return x >= left && x <= left + s.w && y >= top && y <= top + s.h;
 }
 
+/* 长按 2 秒收起（白色顺时针进度圈） */
+const LONG_PRESS_MS = 2000;
+let pressState = null; // { t0, x, y, on }
+
+function drawPressRing() {
+  if (!isOverlay || !pressState || !pressState.on || !pet.image) return;
+  const el = performance.now() - pressState.t0;
+  if (el >= LONG_PRESS_MS) {
+    pressState = null;
+    if (window.PetBridge) window.PetBridge.dismiss();
+    return;
+  }
+  const s = pet.getDisplaySize();
+  if (!s) return;
+  const ctx = pet.ctx;
+  const cyMid = pet.cy - s.h / 2;
+  const rad = Math.max(s.w, s.h) * 0.55 + pet.R * 0.1;
+  const prog = Math.min(1, el / LONG_PRESS_MS);
+  ctx.save();
+  ctx.setTransform(pet.dpr, 0, 0, pet.dpr, 0, 0);
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = Math.max(5, pet.R * 0.09);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  // 从正上方开始顺时针画圈
+  ctx.arc(pet.cx, cyMid, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog);
+  ctx.stroke();
+  ctx.restore();
+}
+
 if (isOverlay) {
   document.body.classList.add('overlay-mode');
+  // 页面根元素也强制透明，避免任何“方框”感
+  document.documentElement.style.background = 'transparent';
   pet.fixedSize = true;
   pet.size = 90;
   pet.scaleFactor = scale;
@@ -325,26 +448,36 @@ if (isOverlay) {
     pet.setFrames('sprites/anim/' + b.dex + '.png', b);
     pet.appear();
   }
-  // 拖拽门控：只在宝可梦本体上生效
+  // 触摸：本体上按下 = 拖拽门控 + 长按进度；移动超过阈值取消长按（转为拖拽）
   const setPetTouch = (on) => {
     if (window.PetBridge) window.PetBridge.setTouchOnPet(!!on);
   };
   canvas.addEventListener('pointerdown', (e) => {
     const rect = canvas.getBoundingClientRect();
-    setPetTouch(pointOnPet(e.clientX - rect.left, e.clientY - rect.top));
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const on = pointOnPet(x, y);
+    setPetTouch(on);
+    pressState = on ? { t0: performance.now(), x: x, y: y, on: true } : null;
   });
-  canvas.addEventListener('pointerup', () => setPetTouch(false));
-  canvas.addEventListener('pointercancel', () => setPetTouch(false));
-  // 悬浮窗右上角关闭按钮
-  overlayClose.addEventListener('click', () => {
-    if (window.PetBridge) window.PetBridge.dismiss();
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pressState) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (Math.abs(x - pressState.x) > 10 || Math.abs(y - pressState.y) > 10) {
+      pressState = null; // 动了 = 拖拽，取消长按
+    }
   });
+  canvas.addEventListener('pointerup', () => { pressState = null; setPetTouch(false); });
+  canvas.addEventListener('pointercancel', () => { pressState = null; setPetTouch(false); });
 }
 
 /* ─── 初始界面 / NFC ─── */
 if (!isOverlay) {
   renderGrid();
   applyScaleUI();
+  updateTrainerUI();
   updateResourceUI();
   const first = BUDDIES['1'];
   if (first) preview(first); // 平台默认展示 1 号
@@ -391,6 +524,7 @@ function frame(now) {
   last = now;
   pet.tick(dt);
   pet.draw();
+  if (isOverlay) drawPressRing();
   stagePet.tick(dt);
   stagePet.draw();
   requestAnimationFrame(frame);

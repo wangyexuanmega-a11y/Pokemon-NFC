@@ -61,6 +61,7 @@ class MainActivity : Activity() {
     // 步数（硬件计步传感器，为进化系统积累数据）
     private var sensorManager: SensorManager? = null
     private var stepCounter: Sensor? = null
+    private var stepDetectorMode = false // 无累计计步器时降级为单步检测
     private var lastSensorSteps = 0f
     private var lastPushMs = 0L
     private var lastPushedTotal = -1L
@@ -250,18 +251,35 @@ class MainActivity : Activity() {
 
     /* ─── 步数统计 ───
      * 硬件计步器（SENSOR_STEP_COUNTER）开机后持续累计，App 每次打开读取增量；
-     * 步数持久化在 SharedPreferences，供进化系统兑换经验。
+     * 部分机型无累计计步器时降级用单步检测器（STEP_DETECTOR）逐个累加；
+     * 步数持久化在 SharedPreferences，供进化系统兑换。
      */
     private fun initStepCounter() {
         if (sensorManager == null) {
             sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
             stepCounter = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+            if (stepCounter == null) {
+                stepCounter = sensorManager?.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+                stepDetectorMode = stepCounter != null
+            }
             lastSensorSteps = prefs.getFloat("last", 0f)
         }
     }
 
     private val stepListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
+            val now = SystemClock.elapsedRealtime()
+            if (stepDetectorMode) {
+                // 单步检测模式：每触发一次 +1
+                val total = prefs.getLong("total", 0L) + 1
+                prefs.edit().putLong("total", total).apply()
+                if (total != lastPushedTotal && now - lastPushMs >= 1000) {
+                    lastPushMs = now
+                    lastPushedTotal = total
+                    pushSteps(total)
+                }
+                return
+            }
             val cur = event.values[0]
             val delta = cur - lastSensorSteps
             var total = prefs.getLong("total", 0L)
@@ -277,7 +295,6 @@ class MainActivity : Activity() {
             lastSensorSteps = cur
             prefs.edit().putFloat("last", cur).putLong("total", total).apply()
             // 推送页面（限频：最多每秒一次）
-            val now = SystemClock.elapsedRealtime()
             if (total != lastPushedTotal && now - lastPushMs >= 1000) {
                 lastPushMs = now
                 lastPushedTotal = total

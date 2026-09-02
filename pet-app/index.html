@@ -29,6 +29,16 @@
       <input id="search-input" type="search" placeholder="搜索名称 / 编号" autocomplete="off">
     </div>
 
+    <!-- 训练家栏 -->
+    <button id="trainer-bar" type="button">
+      <span class="tb-ava">🧢</span>
+      <span class="tb-txt">
+        <span class="tb-name" id="trainer-name">训练家</span>
+        <span class="tb-sub">今日 <b id="today-steps">0</b> 步</span>
+      </span>
+      <span class="tb-tag">我的账号 ›</span>
+    </button>
+
     <!-- 展示平台：宝可梦在这里展示，可用下方滑块缩放大小 -->
     <div id="stage">
       <canvas id="stage-canvas"></canvas>
@@ -47,14 +57,17 @@
     </div>
 
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒<br>走路攒步数 → 兑换神奇糖果 → 升级进化！</p>
+    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒<br>走路攒步数 → 兑换神奇糖果 → 升级进化！<br>长按悬浮宠物 2 秒可收起</p>
   </div>
 
   <!-- 控制卡片 -->
   <div id="control-card" class="hidden">
     <div class="cc-line">
       <div class="cc-name" id="cc-name">妙蛙种子 · No.001</div>
-      <div class="cc-level" id="cc-level">Lv.1</div>
+      <div class="cc-right">
+        <span class="cc-candy" id="cc-candy">🍬 0</span>
+        <span class="cc-level" id="cc-level">Lv.1</span>
+      </div>
     </div>
     <div class="cc-actions">
       <button id="levelup-btn" type="button">升级（1🍬）</button>
@@ -64,8 +77,24 @@
     </div>
   </div>
 
-  <!-- 悬浮宠物右上角关闭按钮（overlay 模式显示） -->
-  <button id="overlay-close" class="overlay-close" type="button" title="收起宠物">✕</button>
+  <!-- 我的账号弹窗 -->
+  <div id="trainer-modal" class="hidden">
+    <div class="tm-card">
+      <div class="tm-head"><span>我的账号</span><button id="tm-close" type="button">✕</button></div>
+      <div class="tm-row"><span class="tm-label">昵称</span><input id="tm-name" type="text" maxlength="12" autocomplete="off"></div>
+      <div class="tm-row"><span class="tm-label">训练家 ID</span><span class="tm-val" id="tm-id">—</span></div>
+      <div class="tm-row"><span class="tm-label">注册日期</span><span class="tm-val" id="tm-date">—</span></div>
+      <div class="tm-row"><span class="tm-label">累计步数</span><span class="tm-val" id="tm-total">0</span></div>
+      <div class="tm-row"><span class="tm-label">今日步数</span><span class="tm-val" id="tm-today">0</span></div>
+      <div class="tm-row"><span class="tm-label">神奇糖果</span><span class="tm-val" id="tm-candy">0</span></div>
+      <button id="tm-save" type="button">保存</button>
+      <button id="wechat-btn" type="button">绑定微信（同步微信步数）</button>
+      <p class="tm-note hidden" id="wechat-note">
+        微信未向第三方 App 开放「微信运动」读取接口，普通安卓 App 也无法直接微信登录（需微信开放平台企业应用认证）。<br>
+        当前步数来自<b>手机硬件计步传感器</b>（与微信运动同源）。待你取得微信开放平台资质后，即可在此接入真正的微信登录与微信步数同步。
+      </p>
+    </div>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>
