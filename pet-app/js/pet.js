@@ -16,29 +16,6 @@ function clamp(x, a = 0, b = 1) { return x < a ? a : x > b ? b : x; }
 function easeOutBack(t) { const c = 1.70158; const u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; }
 function easeInBack(t) { const c = 1.70158; return (c + 1) * t * t * t - c * t * t; }
 
-/* ─── 地面阴影 + 召唤光环 ─── */
-function drawShadow(ctx, p) {
-  const k = 1 - clamp(p.bob * 3, 0, 0.45);
-  ctx.fillStyle = `rgba(0,0,0,${0.24 * k})`;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 0.85 * k, 0.15 * k, 0, 0, TAU);
-  ctx.fill();
-}
-
-function drawRing(ctx, k) {
-  if (k <= 0) return;
-  ctx.strokeStyle = `rgba(0, 212, 255, ${0.55 * k})`;
-  ctx.lineWidth = 0.05;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 1.1, 0.26, 0, 0, TAU);
-  ctx.stroke();
-  ctx.strokeStyle = `rgba(120, 200, 120, ${0.4 * k})`;
-  ctx.lineWidth = 0.03;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 0.85, 0.19, 0, 0, TAU);
-  ctx.stroke();
-}
-
 /* ─── 宠物主体 ─── */
 
 export class Pet {
@@ -72,6 +49,7 @@ export class Pet {
     this.frameH = 0;
     this.fixedSize = !!opts.fixedSize; // 悬浮窗模式：宠物固定尺寸
     this.size = opts.size || 90;
+    this.scaleFactor = 1; // 用户缩放（初始界面滑块调节，持久保存）
 
     if (opts.image) this.setImage(opts.image, !!opts.pixelated);
 
@@ -227,20 +205,15 @@ export class Pet {
     const t = this.time;
     const st = this.stateT;
     const s = this.state;
-    const p = { alpha: 1, scale: 1, bob: 0, breath: 0, rot: 0, ring: 1 };
+    const p = { alpha: 1, scale: 1, bob: 0, breath: 0, rot: 0 };
 
     if (s === 'hidden') { p.alpha = 0; p.scale = 0; return p; }
     if (s === 'appearing') {
       p.scale = easeOutBack(clamp(st / 0.9));
-      p.ring = clamp(st / 0.5);
     } else if (s === 'leaving') {
       const k = clamp(st / 0.6);
       p.scale = 1 - easeInBack(k);
       p.alpha = 1 - k;
-      p.ring = 1 - k;
-    } else {
-      // 出场完成后光环淡出
-      p.ring = clamp(1 - (t - this.appearAt) / 0.8, 0, 1);
     }
 
     // 轻微待机浮动（让宠物看起来是“活的”，不是贴纸）
@@ -266,23 +239,13 @@ export class Pet {
     if (!(this.image && this.contentBox)) return;
 
     const R = this.R;
-    const groundY = this.cy + R * 1.35;
     const petY = this.cy + p.bob * R;
-
-    // 地面阴影 + 召唤光环（固定在地面）
-    ctx.save();
-    ctx.translate(this.cx, groundY);
-    ctx.scale(R, R);
-    drawShadow(ctx, p);
-    drawRing(ctx, p.ring);
-    ctx.restore();
 
     // 宠物本体（锚点在脚底）
     ctx.save();
     ctx.translate(this.cx, petY);
     ctx.scale(R * p.scale, R * p.scale);
     ctx.rotate(p.rot);
-    this._drawHalo(ctx, -0.75, 1.0);
     this._drawImage(ctx, p);
     ctx.restore();
   }
@@ -297,7 +260,7 @@ export class Pet {
 
   _drawImage(ctx, p) {
     const cb = this.contentBox;
-    const targetH = 1.6 * (1 + p.breath);
+    const targetH = 1.6 * (1 + p.breath) * this.scaleFactor;
     const scale = targetH / cb.h;
     // 像素素材用最近邻（锐利），高清素材用平滑
     ctx.imageSmoothingEnabled = !this.pixelated;
@@ -317,12 +280,24 @@ export class Pet {
     ctx.imageSmoothingEnabled = true;
   }
 
-  /** 宠物显示尺寸（px），悬浮窗贴合用 */
+  /** 宠物内容显示尺寸（px） */
   getDisplaySize() {
     const cb = this.contentBox;
     if (!cb) return null;
-    const targetH = 1.6 * this.R;
+    const targetH = 1.6 * this.R * this.scaleFactor;
     const scale = targetH / cb.h;
     return { w: cb.w * scale, h: targetH };
+  }
+
+  /** 完整帧格尺寸（px），悬浮窗贴合用（避免动画边缘被裁剪） */
+  getFrameBox() {
+    const cb = this.contentBox;
+    if (!cb) return null;
+    const targetH = 1.6 * this.R * this.scaleFactor;
+    const s = targetH / cb.h;
+    if (this.mode === 'frames') {
+      return { w: this.frameW * s, h: this.frameH * s };
+    }
+    return { w: cb.w * s, h: targetH };
   }
 }

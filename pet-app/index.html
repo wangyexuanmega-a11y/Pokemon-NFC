@@ -9,7 +9,7 @@
 </head>
 <body>
 
-  <!-- 宠物渲染画布（透明） -->
+  <!-- 宠物渲染画布（悬浮窗模式用） -->
   <canvas id="pet-canvas"></canvas>
 
   <!-- 顶部状态栏 -->
@@ -18,6 +18,7 @@
     <div class="top-right">
       <div id="steps-badge" class="steps hidden">🚶 <span id="steps-count">0</span></div>
       <div id="nfc-status" class="status">初始化…</div>
+      <button id="close-app-btn" class="corner-close hidden" type="button" title="关闭">✕</button>
     </div>
   </header>
 
@@ -27,8 +28,19 @@
       <div class="ss-title">选择你的伙伴</div>
       <input id="search-input" type="search" placeholder="搜索名称 / 编号" autocomplete="off">
     </div>
+
+    <!-- 展示平台：宝可梦在这里展示，可用下方滑块缩放大小 -->
+    <div id="stage">
+      <canvas id="stage-canvas"></canvas>
+    </div>
+    <div id="scale-row">
+      <span class="scale-label">大小</span>
+      <input id="scale-slider" type="range" min="50" max="200" step="5" value="100">
+      <span class="scale-value" id="scale-value">100%</span>
+    </div>
+
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后会以悬浮宠物出现在屏幕上（可拖拽）<br>碰一下 NFC 手环也能直接唤醒</p>
+    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒</p>
   </div>
 
   <!-- 控制卡片 -->
@@ -39,6 +51,9 @@
       <button id="back-btn" type="button" class="secondary">换一只</button>
     </div>
   </div>
+
+  <!-- 悬浮宠物右上角关闭按钮（overlay 模式显示） -->
+  <button id="overlay-close" class="overlay-close" type="button" title="收起宠物">✕</button>
 
   <script type="module" src="js/app.js"></script>
 </body>

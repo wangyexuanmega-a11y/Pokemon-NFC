@@ -1,4 +1,4 @@
-/* 主接线：选择宝可梦（151 图鉴，像素动画）→ 召唤悬浮宠物（App）/ 页面显示（网页）；NFC 唤醒；步数 */
+/* 主接线：图鉴选择 → 平台展示（可缩放，大小持久）→ 悬浮宠物（App）；NFC 唤醒；步数 */
 
 import { NFCManager } from './nfc.js';
 import { Pet } from './pet.js';
@@ -8,7 +8,8 @@ const params = new URLSearchParams(window.location.search);
 const isOverlay = params.has('overlay');
 const isNative = params.has('native');
 
-const canvas = document.getElementById('pet-canvas');
+const canvas = document.getElementById('pet-canvas'); // 全屏画布（悬浮窗模式用）
+const stageCanvas = document.getElementById('stage-canvas'); // 初始界面平台画布
 const selectionScreen = document.getElementById('selection-screen');
 const controlCard = document.getElementById('control-card');
 const ccName = document.getElementById('cc-name');
@@ -19,16 +20,43 @@ const dismissBtn = document.getElementById('dismiss-btn');
 const backBtn = document.getElementById('back-btn');
 const stepsBadge = document.getElementById('steps-badge');
 const stepsCount = document.getElementById('steps-count');
+const scaleSlider = document.getElementById('scale-slider');
+const scaleValue = document.getElementById('scale-value');
+const closeAppBtn = document.getElementById('close-app-btn');
+const overlayClose = document.getElementById('overlay-close');
 
-const pet = new Pet(canvas, {});
+const pet = new Pet(canvas, {}); // 悬浮窗宠物
+const stagePet = new Pet(stageCanvas, { fixedSize: true, size: 46 }); // 平台宠物
 let currentBuddy = null; // dex 编号
+
+/* ─── 大小缩放（持久保存） ─── */
+let scale = 1;
+try { scale = parseFloat(localStorage.getItem('petScale')) || 1; } catch (e) { /* ignore */ }
+scale = Math.min(2, Math.max(0.5, scale));
+stagePet.scaleFactor = scale;
+pet.scaleFactor = scale;
+
+function applyScaleUI() {
+  scaleSlider.value = Math.round(scale * 100);
+  scaleValue.textContent = Math.round(scale * 100) + '%';
+}
+scaleSlider.addEventListener('input', () => {
+  scale = parseFloat(scaleSlider.value) / 100;
+  stagePet.scaleFactor = scale;
+  scaleValue.textContent = scaleSlider.value + '%';
+});
+scaleSlider.addEventListener('change', () => {
+  try { localStorage.setItem('petScale', String(scale)); } catch (e) { /* ignore */ }
+  // App 模式：悬浮宠物按新大小重载（回桌面后生效）
+  if (isNative && currentBuddy && window.PetBridge) window.PetBridge.reloadOverlay();
+});
 
 function setStatus(text, type = '') {
   nfcStatus.textContent = text;
   nfcStatus.className = 'status ' + type;
 }
 
-/* ─── 步数（App 内手机硬件计步，为进化系统积累数据） ─── */
+/* ─── 步数（App 内硬件计步，为进化系统积累数据） ─── */
 let totalSteps = 0;
 function updateStepsUI() {
   if (!isNative) return;
@@ -46,7 +74,7 @@ window.__petSteps = function (n) {
   updateStepsUI();
 };
 
-/* ─── 选择界面 ─── */
+/* ─── 图鉴网格 ─── */
 function renderGrid(filter = '') {
   grid.innerHTML = '';
   const f = filter.toLowerCase();
@@ -77,20 +105,24 @@ function renderGrid(filter = '') {
 }
 searchInput.addEventListener('input', () => renderGrid(searchInput.value.trim()));
 
+/* ─── 平台预览 ─── */
+function preview(b) {
+  stagePet.setFrames('sprites/anim/' + b.dex + '.png', b);
+  stagePet.scaleFactor = scale;
+  stagePet.appear();
+}
+
 /* ─── 召唤 ─── */
 function summon(id) {
   const b = findBuddy(id);
   if (!b) return;
   currentBuddy = b.dex;
+  preview(b);
   showControl(b);
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    // App 模式：原生创建悬浮宠物窗口（可拖拽）
+    // App 模式：悬浮宠物（App 前台时隐藏，回桌面显示；大小用保存的缩放值）
     window.PetBridge.summon(String(b.dex));
-  } else if (!isOverlay) {
-    // 网页模式：直接显示在页面里
-    pet.setFrames('sprites/anim/' + b.dex + '.png', b);
-    pet.appear();
   }
 }
 
@@ -105,11 +137,11 @@ function backToSelection() {
   selectionScreen.classList.remove('hidden');
 }
 
-/* ─── 交互（动作动画已暂停，仅保留收起/换一只） ─── */
+/* ─── 交互 ─── */
 dismissBtn.addEventListener('click', () => {
   currentBuddy = null;
   if (isNative && window.PetBridge) window.PetBridge.dismiss();
-  else pet.dismiss();
+  else stagePet.dismiss();
   backToSelection();
   setStatus('已收起', '');
 });
@@ -128,25 +160,34 @@ window.__petNfc = function (id) {
 
 /* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
 
-/** 把宠物在窗口里的实际像素范围告诉原生 → 原生把窗口缩到刚好包住宠物（缩小触摸影响区） */
+/** 把宠物完整帧格的范围告诉原生 → 原生把窗口贴合宠物（不裁剪动画边缘，缩小触摸影响区） */
 function reportPetBounds() {
   if (!isOverlay || !window.PetBridge) return;
-  const s = pet.getDisplaySize();
-  if (!s) return;
+  const box = pet.getFrameBox();
+  if (!box) return;
   const R = pet.R;
-  const pad = R * 0.15; // 动画摇摆余量
-  const left = pet.cx - s.w / 2 - pad;
-  const top = pet.cy - s.h - R * 0.1 - pad;
-  const w = s.w + pad * 2;
-  const h = s.h + R * 0.5 + pad;
+  const pad = R * 0.12;
+  const left = pet.cx - box.w / 2 - pad;
+  const top = pet.cy - box.h - R * 0.08 - pad;
+  const w = box.w + pad * 2;
+  const h = box.h + pad * 2 + R * 0.25;
   window.PetBridge.setPetBounds(Math.round(left), Math.round(top), Math.round(w), Math.round(h));
+}
+
+/** 触摸点是否在宝可梦本体上（决定拖拽是否生效） */
+function pointOnPet(x, y) {
+  const s = pet.getDisplaySize();
+  if (!s) return false;
+  const left = pet.cx - s.w / 2;
+  const top = pet.cy - s.h;
+  return x >= left && x <= left + s.w && y >= top && y <= top + s.h;
 }
 
 if (isOverlay) {
   document.body.classList.add('overlay-mode');
-  // 悬浮窗：宠物固定尺寸，窗口贴合宠物（触摸只挡宠物附近，其它区域穿透）
   pet.fixedSize = true;
   pet.size = 90;
+  pet.scaleFactor = scale;
   pet.resize();
   pet.onImageReady = reportPetBounds;
   window.addEventListener('resize', reportPetBounds);
@@ -156,11 +197,37 @@ if (isOverlay) {
     pet.setFrames('sprites/anim/' + b.dex + '.png', b);
     pet.appear();
   }
+  // 拖拽门控：只在宝可梦本体上生效
+  const setPetTouch = (on) => {
+    if (window.PetBridge) window.PetBridge.setTouchOnPet(!!on);
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    setPetTouch(pointOnPet(e.clientX - rect.left, e.clientY - rect.top));
+  });
+  canvas.addEventListener('pointerup', () => setPetTouch(false));
+  canvas.addEventListener('pointercancel', () => setPetTouch(false));
+  // 悬浮窗右上角关闭按钮
+  overlayClose.addEventListener('click', () => {
+    if (window.PetBridge) window.PetBridge.dismiss();
+  });
 }
 
-/* ─── NFC ─── */
+/* ─── 初始界面 / NFC ─── */
 if (!isOverlay) {
   renderGrid();
+  applyScaleUI();
+  const first = BUDDIES['1'];
+  if (first) preview(first); // 平台默认展示 1 号
+
+  // 初始界面右上角关闭（App 内退出）
+  if (isNative) {
+    closeAppBtn.classList.remove('hidden');
+    closeAppBtn.addEventListener('click', () => {
+      if (window.PetBridge) window.PetBridge.exit();
+    });
+  }
+
   refreshSteps();
   setInterval(refreshSteps, 5000);
 
@@ -177,10 +244,8 @@ if (!isOverlay) {
   });
 
   if (isNative) {
-    // App 模式：由原生 NFC 驱动
     setStatus('等待 NFC 标签…', '');
   } else {
-    // 网页模式：URL 参数或 Web NFC 常驻扫描
     const urlBuddy = nfc.readBuddyFromURL();
     if (urlBuddy) {
       window.__petNfc(urlBuddy);
@@ -197,6 +262,8 @@ function frame(now) {
   last = now;
   pet.tick(dt);
   pet.draw();
+  stagePet.tick(dt);
+  stagePet.draw();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

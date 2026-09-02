@@ -125,6 +125,37 @@ body.overlay-mode #control-card {
   white-space: nowrap;
 }
 
+/* 初始界面右上角关闭（App 内退出） */
+.corner-close {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.08);
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  flex: none;
+}
+.corner-close:active { background: rgba(255,255,255,.18); }
+
+/* 悬浮宠物右上角关闭 */
+.overlay-close {
+  position: fixed;
+  top: 4px; right: 4px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,.35);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+body.overlay-mode .overlay-close { display: flex; }
+
 /* ─── 宝可梦图鉴选择界面（可滚动） ─── */
 #selection-screen {
   position: fixed;
@@ -174,6 +205,49 @@ body.overlay-mode #control-card {
 }
 #search-input::placeholder { color: var(--text-dim); }
 #search-input:focus { border-color: rgba(126,208,126,.5); }
+
+/* 展示平台：宝可梦在这里展示 */
+#stage {
+  position: relative;
+  width: min(88vw, 340px);
+  height: 168px;
+  margin: 2px auto 10px;
+  border-radius: 18px;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(126,208,126,.08), rgba(255,255,255,.02));
+  border: 1px solid rgba(255,255,255,.08);
+  overflow: hidden;
+}
+#stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: 56%;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(126,208,126,.30) 0%, rgba(126,208,126,.12) 55%, transparent 75%);
+  pointer-events: none;
+}
+
+/* 大小缩放 */
+#scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 12px;
+  width: min(88vw, 340px);
+}
+.scale-label { font-size: 12.5px; color: var(--text-dim); }
+#scale-slider { flex: 1; max-width: 180px; accent-color: var(--green); }
+.scale-value { font-size: 12.5px; color: var(--green); min-width: 42px; text-align: right; }
 
 #buddy-grid {
   display: grid;

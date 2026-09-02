@@ -21,6 +21,7 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -55,6 +56,7 @@ class MainActivity : Activity() {
     private var startLx = 0
     private var startLy = 0
     private var dragging = false
+    private var touchOnPet = false // 触摸点是否在宝可梦本体上（拖拽门控）
 
     // 步数（硬件计步传感器，为进化系统积累数据）
     private var sensorManager: SensorManager? = null
@@ -110,6 +112,14 @@ class MainActivity : Activity() {
         if (buddy != null && Settings.canDrawOverlays(this) && overlayWebView == null) {
             createOverlay(buddy)
         }
+        // App 前台：隐藏悬浮宠物（由初始界面平台展示）
+        overlayWebView?.visibility = View.GONE
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 回桌面：重新显示悬浮宠物
+        overlayWebView?.visibility = View.VISIBLE
     }
 
     override fun onPause() {
@@ -225,6 +235,17 @@ class MainActivity : Activity() {
         /** 累计步数（进化系统用） */
         @JavascriptInterface
         fun getTotalSteps(): Long = prefs.getLong("total", 0L)
+
+        /** 触摸点是否在宝可梦本体上（拖拽只在本体生效） */
+        @JavascriptInterface
+        fun setTouchOnPet(on: Boolean) = runOnUiThread { touchOnPet = on }
+
+        /** 初始界面右上角关闭：退出 App */
+        @JavascriptInterface
+        fun exit() = runOnUiThread {
+            removeOverlay()
+            finish()
+        }
     }
 
     /* ─── 步数统计 ───
@@ -290,6 +311,7 @@ class MainActivity : Activity() {
     private fun createOverlay(buddy: String) {
         if (overlayWebView == null) {
             val wv = buildWebView()
+            wv.addJavascriptInterface(PetBridge(), "PetBridge")
             wv.setBackgroundColor(Color.TRANSPARENT)
             val winW = dp(240)
             val winH = dp(280)
@@ -317,22 +339,28 @@ class MainActivity : Activity() {
                         startLx = oLp.x
                         startLy = oLp.y
                         dragging = false
+                        touchOnPet = false // 由页面 pointerdown 判断后设置
                         false
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val dx = ev.rawX - dragX
-                        val dy = ev.rawY - dragY
-                        if (!dragging && Math.abs(dx) < slop && Math.abs(dy) < slop) {
+                        // 拖拽只在宝可梦本体上生效
+                        if (!touchOnPet) {
                             false
                         } else {
-                            dragging = true
-                            oLp.x = startLx + dx.toInt()
-                            oLp.y = startLy + dy.toInt()
-                            try {
-                                windowManager.updateViewLayout(v, oLp)
-                            } catch (_: Exception) {
+                            val dx = ev.rawX - dragX
+                            val dy = ev.rawY - dragY
+                            if (!dragging && Math.abs(dx) < slop && Math.abs(dy) < slop) {
+                                false
+                            } else {
+                                dragging = true
+                                oLp.x = startLx + dx.toInt()
+                                oLp.y = startLy + dy.toInt()
+                                try {
+                                    windowManager.updateViewLayout(v, oLp)
+                                } catch (_: Exception) {
+                                }
+                                true
                             }
-                            true
                         }
                     }
                     else -> {
