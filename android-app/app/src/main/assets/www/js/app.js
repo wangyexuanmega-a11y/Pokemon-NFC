@@ -22,10 +22,18 @@ const BUDDIES = {
     name: '妙蛙花', type: '草系',
     hd: 'sprites/venusaur.png', pixel: 'sprites/pixel/venusaur.png',
   },
+  charmander: {
+    name: '小火龙', type: '火系',
+    hd: 'sprites/charmander.png', pixel: 'sprites/pixel/charmander.png',
+  },
+  squirtle: {
+    name: '杰尼龟', type: '水系',
+    hd: 'sprites/squirtle.png', pixel: 'sprites/pixel/squirtle.png',
+  },
 };
 
 /* 预留空位（以后补充图鉴时直接启用） */
-const RESERVED = ['charmander', 'squirtle', 'pikachu', 'eevee', 'jigglypuff', 'meowth'];
+const RESERVED = ['pikachu', 'eevee', 'jigglypuff', 'meowth'];
 
 const params = new URLSearchParams(window.location.search);
 const isOverlay = params.has('overlay');
@@ -73,8 +81,8 @@ function applyVariantUI() {
   const b = buddyOf(currentBuddy);
   if (!b) return;
   if (isNative && window.PetBridge) {
-    // App 模式：重载悬浮窗应用新素材
-    window.PetBridge.summon(currentBuddy);
+    // App 模式：只刷新悬浮窗素材（不重新召唤、不弹权限）
+    window.PetBridge.reloadOverlay();
   } else if (!isOverlay) {
     pet.setImage(variantImage(b), variant === 'pixel');
   }
@@ -142,6 +150,7 @@ function backToSelection() {
 
 /* ─── 交互（动作动画已暂停，仅保留收起/换一只） ─── */
 dismissBtn.addEventListener('click', () => {
+  currentBuddy = null; // 已收起：之后切换素材不再联动
   if (isNative && window.PetBridge) window.PetBridge.dismiss();
   else pet.dismiss();
   backToSelection();
@@ -161,11 +170,33 @@ window.__petNfc = function (id) {
 };
 
 /* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
+
+/** 把宠物在窗口里的实际像素范围告诉原生 → 原生把窗口缩到刚好包住宠物（缩小触摸影响区） */
+function reportPetBounds() {
+  if (!isOverlay || !window.PetBridge) return;
+  const cb = pet.contentBox;
+  if (!cb) return;
+  const R = pet.R;
+  const targetH = 1.6 * R;
+  const dw = targetH * (cb.w / cb.h);
+  const left = pet.cx - dw / 2;
+  const top = pet.cy - targetH - R * 0.1; // 头顶留点余量
+  const w = dw;
+  const h = targetH + R * 0.5; // 含地面阴影
+  window.PetBridge.setPetBounds(Math.round(left), Math.round(top), Math.round(w), Math.round(h));
+}
+
 if (isOverlay) {
   document.body.classList.add('overlay-mode');
   try {
     if (localStorage.getItem('petVariant') === 'pixel') variant = 'pixel';
   } catch (e) { /* ignore */ }
+  // 悬浮窗：宠物固定尺寸，窗口贴合宠物（触摸只挡宠物附近，其它区域穿透）
+  pet.fixedSize = true;
+  pet.size = 90;
+  pet.resize();
+  pet.onImageReady = reportPetBounds;
+  window.addEventListener('resize', reportPetBounds);
   const id = params.get('buddy') || 'bulbasaur';
   const b = buddyOf(id);
   if (b) {

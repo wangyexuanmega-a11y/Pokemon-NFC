@@ -62,6 +62,16 @@ class MainActivity : Activity() {
 
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         handleNfcIntent(intent)
+
+        // 开屏先要悬浮窗权限（宠物需要悬浮在屏幕上）
+        if (!Settings.canDrawOverlays(this)) {
+            mainWebView.postDelayed({
+                Toast.makeText(this, "需要「显示在其他应用上层」权限，宠物才能悬浮在屏幕上", Toast.LENGTH_LONG).show()
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                )
+            }, 600)
+        }
     }
 
     override fun onResume() {
@@ -166,6 +176,32 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun summon(buddy: String) = runOnUiThread { summonOverlay(buddy) }
 
+        /** 只刷新悬浮窗素材（宠物已在场时用，不重新召唤、不弹权限） */
+        @JavascriptInterface
+        fun reloadOverlay() = runOnUiThread {
+            val buddy = currentBuddy
+            val wv = overlayWebView
+            if (buddy != null && wv != null) {
+                wv.loadUrl("$REMOTE_INDEX?native=1&overlay=1&buddy=$buddy")
+            }
+        }
+
+        /** 宠物实际像素范围 → 原生把悬浮窗缩到刚好包住宠物（缩小触摸影响区） */
+        @JavascriptInterface
+        fun setPetBounds(left: Int, top: Int, width: Int, height: Int) = runOnUiThread {
+            val wv = overlayWebView ?: return@runOnUiThread
+            val lp = wv.layoutParams as? WindowManager.LayoutParams ?: return@runOnUiThread
+            if (width <= 0 || height <= 0) return@runOnUiThread
+            lp.x += left
+            lp.y += top
+            lp.width = width
+            lp.height = height
+            try {
+                windowManager.updateViewLayout(wv, lp)
+            } catch (_: Exception) {
+            }
+        }
+
         @JavascriptInterface
         fun dismiss() = runOnUiThread { removeOverlay() }
     }
@@ -188,8 +224,8 @@ class MainActivity : Activity() {
         if (overlayWebView == null) {
             val wv = buildWebView()
             wv.setBackgroundColor(Color.TRANSPARENT)
-            val winW = dp(300)
-            val winH = dp(360)
+            val winW = dp(240)
+            val winH = dp(280)
             val metrics = resources.displayMetrics
             val lp = WindowManager.LayoutParams(
                 winW, winH,

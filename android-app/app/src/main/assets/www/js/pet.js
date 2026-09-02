@@ -39,153 +39,6 @@ function drawRing(ctx, k) {
   ctx.stroke();
 }
 
-/* ─── 程序化皮卡丘（仅当某只宝可梦没有图片时的占位回退，静态绘制） ─── */
-function drawTail(ctx) {
-  ctx.save();
-  ctx.translate(0.72, -0.1);
-  ctx.rotate(0.5);
-  ctx.fillStyle = '#8B5A2B';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(0.3, -0.08);
-  ctx.lineTo(0.3, 0.22);
-  ctx.lineTo(0, 0.3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.03;
-  ctx.beginPath();
-  ctx.moveTo(0.16, 0.05);
-  ctx.lineTo(0.5, -0.35);
-  ctx.lineTo(0.34, -0.28);
-  ctx.lineTo(0.62, -0.62);
-  ctx.lineTo(0.42, -0.55);
-  ctx.lineTo(0.75, -0.95);
-  ctx.lineTo(0.95, -0.42);
-  ctx.lineTo(0.68, -0.36);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawEar(ctx) {
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.04;
-  ctx.beginPath();
-  ctx.moveTo(-0.22, 0.05);
-  ctx.quadraticCurveTo(-0.26, -0.7, 0, -1.08);
-  ctx.quadraticCurveTo(0.22, -0.7, 0.22, 0.05);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#2B1B12';
-  ctx.beginPath();
-  ctx.moveTo(-0.1, -0.76);
-  ctx.quadraticCurveTo(-0.08, -1.04, 0, -1.08);
-  ctx.quadraticCurveTo(0.1, -0.76, 0.1, -0.76);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function drawEars(ctx) {
-  ctx.save();
-  ctx.translate(-0.44, -0.58);
-  ctx.rotate(-0.26);
-  drawEar(ctx);
-  ctx.restore();
-  ctx.save();
-  ctx.translate(0.44, -0.58);
-  ctx.rotate(0.26);
-  drawEar(ctx);
-  ctx.restore();
-}
-
-function drawBody(ctx, breath) {
-  ctx.save();
-  ctx.scale(1 + breath, 1 + breath);
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.05;
-  ctx.beginPath();
-  ctx.ellipse(0, 0.05, 0.94, 0.9, 0, 0, TAU);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawEye(ctx, x, y, r) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.fillStyle = '#2B1B12';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, r, r, 0, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(r * 0.3, -r * 0.35, r * 0.26, 0, TAU);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawFace(ctx) {
-  drawEye(ctx, -0.32, -0.24, 0.19);
-  drawEye(ctx, 0.32, -0.24, 0.19);
-  ctx.fillStyle = '#2B1B12';
-  ctx.beginPath();
-  ctx.ellipse(0, -0.02, 0.045, 0.035, 0, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = '#2B1B12';
-  ctx.lineWidth = 0.035;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.arc(0, 0.02, 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.stroke();
-  ctx.fillStyle = '#E5422D';
-  ctx.beginPath();
-  ctx.ellipse(-0.62, 0.14, 0.18, 0.14, 0, 0, TAU);
-  ctx.ellipse(0.62, 0.14, 0.18, 0.14, 0, 0, TAU);
-  ctx.fill();
-}
-
-function drawFeet(ctx) {
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.04;
-  ctx.beginPath();
-  ctx.ellipse(-0.38, 0.88, 0.24, 0.12, 0, 0, TAU);
-  ctx.ellipse(0.38, 0.88, 0.24, 0.12, 0, 0, TAU);
-  ctx.fill();
-  ctx.stroke();
-}
-
-function drawArms(ctx) {
-  ctx.save();
-  ctx.translate(-0.92, 0.28);
-  ctx.rotate(-0.4);
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.04;
-  ctx.beginPath();
-  ctx.ellipse(0, 0.16, 0.14, 0.24, 0, 0, TAU);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-  ctx.save();
-  ctx.translate(0.92, 0.28);
-  ctx.rotate(0.4);
-  ctx.fillStyle = '#F8D030';
-  ctx.strokeStyle = '#C9A227';
-  ctx.lineWidth = 0.04;
-  ctx.beginPath();
-  ctx.ellipse(0, 0.16, 0.14, 0.24, 0, 0, TAU);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
 /* ─── 宠物主体 ─── */
 
 export class Pet {
@@ -204,11 +57,14 @@ export class Pet {
     this.appearAt = -10; // 出场时刻（用于光环淡出）
     this.visible = false;
     this.onVisibleChange = null;
+    this.onImageReady = null; // 图片就绪回调（悬浮窗用它报告宠物尺寸）
 
     this.image = null;
     this.contentBox = null; // 不透明内容边界 {x,y,w,h}
     this.imageFailed = false;
     this.pixelated = false;
+    this.fixedSize = !!opts.fixedSize; // 悬浮窗模式：宠物固定尺寸
+    this.size = opts.size || 90;
 
     if (opts.image) this.setImage(opts.image, !!opts.pixelated);
 
@@ -224,7 +80,7 @@ export class Pet {
     this.canvas.height = Math.round(this.h * this.dpr);
     this.cx = this.w / 2;
     this.cy = this.h / 2;
-    this.R = Math.min(this.w, this.h) * 0.26;
+    this.R = this.fixedSize ? this.size : Math.min(this.w, this.h) * 0.26;
   }
 
   /** 更换宠物图片；pixelated = true 时用最近邻缩放（像素素材保持锐利） */
@@ -261,6 +117,9 @@ export class Pet {
         // 读取失败就当整图内容
       }
       this.image = img;
+      // 图片就绪时若正在出场，重播出场动画（避免闪现空白/旧素材）
+      if (this.state === 'appearing') this.stateT = 0;
+      if (this.onImageReady) this.onImageReady();
     };
     img.onerror = () => {
       this.imageFailed = true;
@@ -334,9 +193,12 @@ export class Pet {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.globalAlpha = p.alpha;
 
+    // 素材未就绪：不绘制任何内容（不再显示占位图案）
+    if (!(this.image && this.contentBox)) return;
+
     const R = this.R;
     const groundY = this.cy + R * 1.35;
-    const petY = this.cy + (p.bob + 0) * R;
+    const petY = this.cy + p.bob * R;
 
     // 地面阴影 + 召唤光环（固定在地面）
     ctx.save();
@@ -346,20 +208,13 @@ export class Pet {
     drawRing(ctx, p.ring);
     ctx.restore();
 
-    // 宠物本体（图片锚点在脚底，程序化锚点在身体中心）
-    const imageMode = this.image && this.contentBox;
-    const anchorY = imageMode ? petY : petY - 0.85 * R;
+    // 宠物本体（锚点在脚底）
     ctx.save();
-    ctx.translate(this.cx, anchorY);
+    ctx.translate(this.cx, petY);
     ctx.scale(R * p.scale, R * p.scale);
     ctx.rotate(p.rot);
-    if (imageMode) {
-      this._drawHalo(ctx, -0.75, 1.0);
-      this._drawImage(ctx, p);
-    } else {
-      this._drawHalo(ctx, 0, 1.6);
-      this._drawProcedural(ctx, p);
-    }
+    this._drawHalo(ctx, -0.75, 1.0);
+    this._drawImage(ctx, p);
     ctx.restore();
   }
 
@@ -381,14 +236,5 @@ export class Pet {
     // 底部对齐（脚踩在地面）
     ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -targetH, dw, targetH);
     ctx.imageSmoothingEnabled = true;
-  }
-
-  _drawProcedural(ctx, p) {
-    drawTail(ctx);
-    drawEars(ctx);
-    drawBody(ctx, p.breath);
-    drawFeet(ctx);
-    drawArms(ctx);
-    drawFace(ctx);
   }
 }

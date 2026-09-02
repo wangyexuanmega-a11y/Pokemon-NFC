@@ -54,13 +54,34 @@ npx serve . -p 5174
 2. 在 `js/app.js` 的 `BUDDIES` 里加一行：
 
 ```js
-charmander: { name: '小火龙', type: '火系', image: 'sprites/charmander.png' },
+charmander: { name: '小火龙', type: '火系', hd: 'sprites/charmander.png', pixel: 'sprites/pixel/charmander.png' },
 ```
 
-3. 在 `RESERVED` 数组里删掉对应的占位名即可。Android App 需重新构建（推 GitHub 自动构建）。
+3. 在 `RESERVED` 数组里删掉对应的占位名即可。App 在线加载，推送后自动生效。
 
-> 图片建议：透明背景、主体居中、至少 256×256（现在是 96×96，屏幕放大会偏软）。
-> 想换皮卡丘等其他宝可梦同理，PNG + 一行目录。
+> 本地 `pokemon/` 文件夹是完整宝可梦素材库（PokéAPI sprites 包）：
+> - 高清：`pokemon/other/home/<编号>.png`（512×512 官方渲染）
+> - 像素：`pokemon/<编号>.png`（96×96）
+> - 像素动画：`pokemon/versions/generation-v/black-white/animated/<编号>.gif`
+
+## 做动画需要什么素材（规划）
+
+最简单的方案是**逐帧精灵图**，两种交付格式任选：
+
+1. **精灵图集（推荐）**：一张大图，行 = 动作、列 = 帧，透明底、统一画布。附配置：
+   ```js
+   { cols: 4, rows: 2, rowsDef: [
+     { index: 0, id: 'idle', frames: 4, fps: 6 },   // 待机呼吸
+     { index: 1, id: 'spawn', frames: 4, fps: 8 },  // 出场
+   ]}
+   ```
+   （`js/spritesheet.js` 已写好这个播放器，直接可用）
+2. **分帧文件**：`idle_0.png / idle_1.png ...`，我这边自动拼成图集。
+
+- 每帧建议 ≥256×256、透明背景、所有帧同一画布尺寸、同一位置
+- 最小起步：**待机 2~4 帧**（呼吸/浮动）就够"活"起来
+- 你素材库里 `black-white/animated/*.gif` 就是 2 帧像素动画，可以直接解析成帧
+- Blender 路线：正交相机摆姿态逐帧渲染透明 PNG（需要时我写导出脚本）
 
 ## Android App（悬浮宠物）
 
