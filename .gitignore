@@ -18,6 +18,7 @@ build/
 .idea/
 captures/
 
-# 本地宝可梦素材库（仓库里只保留 pet-app/sprites 用到的图）
-pokemon/
-POKEMON素材/
+# 本地宝可梦素材库（仓库里只保留 pet-app/sprites 用到的图；/pokemon 只匹配仓库根目录，
+# 不能匹配 java 包目录 com/pokemon）
+/pokemon/
+/POKEMON素材/
