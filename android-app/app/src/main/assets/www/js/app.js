@@ -77,8 +77,9 @@ scaleSlider.addEventListener('change', () => {
   try { localStorage.setItem('petScale', String(scale)); } catch (e) { /* ignore */ }
   if (isNative && currentBuddy && window.PetBridge) {
     // App 模式：按新尺寸重建悬浮窗（保持宠物中心）
-    const d = overlayDims(findBuddy(currentBuddy));
-    window.PetBridge.reloadOverlay(String(currentBuddy), d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
+    try {
+      bridgeReload(String(currentBuddy), overlayDims(findBuddy(currentBuddy)));
+    } catch (e) { /* ignore */ }
   }
 });
 
@@ -97,7 +98,9 @@ function syncCandies() {
   }
 }
 function spendCandies(n) {
-  if (isNative && window.PetBridge) return !!window.PetBridge.consumeCandy(n);
+  if (isNative && window.PetBridge && typeof window.PetBridge.consumeCandy === 'function') {
+    return !!window.PetBridge.consumeCandy(n);
+  }
   if (candies >= n) {
     candies -= n;
     try { localStorage.setItem('petCandies', String(candies)); } catch (e) { /* ignore */ }
@@ -109,7 +112,9 @@ function spendCandies(n) {
 try {
   if (isNative && !localStorage.getItem('candiesImported')) {
     const old = parseInt(localStorage.getItem('petCandies'), 10) || 0;
-    if (old > 0 && window.PetBridge) window.PetBridge.addCandy(old);
+    if (old > 0 && window.PetBridge && typeof window.PetBridge.addCandy === 'function') {
+      window.PetBridge.addCandy(old);
+    }
     localStorage.setItem('candiesImported', '1');
     try { localStorage.removeItem('petCandies'); } catch (e) { /* ignore */ }
   }
@@ -238,7 +243,9 @@ function updateExerciseUI() {
 function pollNative() {
   if (!isNative) return;
   if (window.PetBridge) {
-    exRunning = !!window.PetBridge.isExercising();
+    if (typeof window.PetBridge.isExercising === 'function') {
+      exRunning = !!window.PetBridge.isExercising();
+    }
     syncCandies();
   }
   updateExerciseUI();
@@ -249,12 +256,12 @@ function pollNative() {
 exBtn.addEventListener('click', () => {
   if (!isNative || !window.PetBridge) return;
   if (exRunning) {
-    window.PetBridge.endExercise();
+    if (typeof window.PetBridge.endExercise === 'function') window.PetBridge.endExercise();
     exRunning = false;
     setStatus('运动结束，糖果已结算', 'success');
   } else {
     exBaseMeters = nativeMeters();
-    window.PetBridge.startExercise();
+    if (typeof window.PetBridge.startExercise === 'function') window.PetBridge.startExercise();
     setStatus('开始记录运动，锁屏也会继续~', 'success');
   }
   setTimeout(pollNative, 800);
@@ -376,6 +383,30 @@ function preview(b) {
   stagePet.appear();
 }
 
+/* ─── 原生桥（带兼容保护：旧版 APK 的原生方法签名不同，自动降级） ─── */
+function bridgeSummon(dex, d) {
+  try {
+    // 新版：一次性尺寸 + 宠物命中区
+    window.PetBridge.summon(dex, d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
+  } catch (e) {
+    // 旧版：单参数召唤（用原生默认窗口）
+    try {
+      window.PetBridge.summon(dex);
+    } catch (e2) {
+      setStatus('召唤失败：原生桥不可用', 'error');
+    }
+  }
+}
+function bridgeReload(dex, d) {
+  try {
+    window.PetBridge.reloadOverlay(dex, d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
+  } catch (e) {
+    try {
+      window.PetBridge.reloadOverlay();
+    } catch (e2) { /* ignore */ }
+  }
+}
+
 /* ─── 悬浮窗窗口尺寸（物理 px，一次性传给原生；不再反馈式改尺寸） ─── */
 function clampNum(v, a, b) {
   return Math.min(b, Math.max(a, v));
@@ -409,8 +440,11 @@ function summon(id) {
   updateResourceUI();
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    const d = overlayDims(b);
-    window.PetBridge.summon(String(b.dex), d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
+    try {
+      bridgeSummon(String(b.dex), overlayDims(b));
+    } catch (e) {
+      setStatus('召唤失败，请重新打开 App', 'error');
+    }
   }
 }
 
@@ -453,7 +487,7 @@ if (isOverlay) {
   document.documentElement.style.background = 'transparent';
   pet.resize();
   const reportRect = () => {
-    if (!window.PetBridge) return;
+    if (!window.PetBridge || typeof window.PetBridge.setPetRect !== 'function') return;
     const r = pet.getContentRectCss();
     if (!r) return;
     const dpr = Math.min(3, window.devicePixelRatio || 1);
