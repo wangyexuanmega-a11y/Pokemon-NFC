@@ -1,5 +1,5 @@
-/* 主接线：图鉴选择 → 平台展示（可缩放持久）→ 悬浮宠物（App）；NFC 唤醒；
- * 养成：步数(传感器) → 兑换神奇糖果 → 升级/进化；长按宠物收起；训练家账号 */
+/* 主接线：图鉴选择 → 平台展示（可缩放持久）→ 悬浮宠物（App，原生拖拽/长按收起）；
+ * 养成：GPS 运动距离(1km=1🍬) → 糖果(原生账本) → 升级/进化；训练家账号 */
 
 import { NFCManager } from './nfc.js';
 import { Pet } from './pet.js';
@@ -9,8 +9,8 @@ const params = new URLSearchParams(window.location.search);
 const isOverlay = params.has('overlay');
 const isNative = params.has('native');
 
-const canvas = document.getElementById('pet-canvas'); // 全屏画布（悬浮窗模式用）
-const stageCanvas = document.getElementById('stage-canvas'); // 初始界面平台画布
+const canvas = document.getElementById('pet-canvas'); // 悬浮窗画布
+const stageCanvas = document.getElementById('stage-canvas'); // 平台画布
 const selectionScreen = document.getElementById('selection-screen');
 const controlCard = document.getElementById('control-card');
 const ccName = document.getElementById('cc-name');
@@ -26,8 +26,6 @@ const evolveBtn = document.getElementById('evolve-btn');
 const stepsBadge = document.getElementById('steps-badge');
 const stepsCount = document.getElementById('steps-count');
 const candyCount = document.getElementById('candy-count');
-const stepsLeftEl = document.getElementById('steps-left');
-const exchangeBtn = document.getElementById('exchange-btn');
 const scaleSlider = document.getElementById('scale-slider');
 const scaleValue = document.getElementById('scale-value');
 const closeAppBtn = document.getElementById('close-app-btn');
@@ -42,11 +40,16 @@ const tmDate = document.getElementById('tm-date');
 const tmTotal = document.getElementById('tm-total');
 const tmToday = document.getElementById('tm-today');
 const tmCandy = document.getElementById('tm-candy');
+const tmDist = document.getElementById('tm-dist');
 const tmSave = document.getElementById('tm-save');
 const wechatBtn = document.getElementById('wechat-btn');
 const wechatNote = document.getElementById('wechat-note');
+const exerciseCard = document.getElementById('exercise-card');
+const exBtn = document.getElementById('ex-btn');
+const exSession = document.getElementById('ex-session');
+const exTotal = document.getElementById('ex-total');
 
-const pet = new Pet(canvas, {}); // 悬浮窗宠物
+const pet = new Pet(canvas, { contain: true, groundAt: 0.62 }); // 悬浮窗宠物（自适应窗口）
 const stagePet = new Pet(stageCanvas, {
   fixedSize: true,
   size: 46,
@@ -60,7 +63,6 @@ let scale = 1;
 try { scale = parseFloat(localStorage.getItem('petScale')) || 1; } catch (e) { /* ignore */ }
 scale = Math.min(1.85, Math.max(0.5, scale));
 stagePet.scaleFactor = scale;
-pet.scaleFactor = scale;
 
 function applyScaleUI() {
   scaleSlider.value = Math.round(scale * 100);
@@ -73,55 +75,52 @@ scaleSlider.addEventListener('input', () => {
 });
 scaleSlider.addEventListener('change', () => {
   try { localStorage.setItem('petScale', String(scale)); } catch (e) { /* ignore */ }
-  if (isNative && currentBuddy && window.PetBridge) window.PetBridge.reloadOverlay();
+  if (isNative && currentBuddy && window.PetBridge) {
+    // App 模式：按新尺寸重建悬浮窗（保持宠物中心）
+    const d = overlayDims(findBuddy(currentBuddy));
+    window.PetBridge.reloadOverlay(String(currentBuddy), d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
+  }
 });
 
-/* ─── 钱包：步数 → 神奇糖果 ─── */
-const CANDY_RATE = 500; // 步数兑换一颗糖果
+/* ─── 糖果账本（原生持久化：1km=1🍬 由运动服务发放） ─── */
 const LEVEL_COST = 1; // 升级消耗糖果
 const EVOLVE_COST = 5; // 进化消耗糖果
-const EVO_LEVEL_STAGE1 = 10; // 第一段进化等级
-const EVO_LEVEL_STAGE2 = 20; // 第二段进化等级
+const EVO_LEVEL_STAGE1 = 10;
+const EVO_LEVEL_STAGE2 = 20;
 
-let totalSteps = 0;
 let candies = 0;
-let stepsSpent = 0;
-try { candies = parseInt(localStorage.getItem('petCandies'), 10) || 0; } catch (e) { /* ignore */ }
-try { stepsSpent = parseInt(localStorage.getItem('petStepsSpent'), 10) || 0; } catch (e) { /* ignore */ }
+function syncCandies() {
+  if (isNative && window.PetBridge && typeof window.PetBridge.getCandies === 'function') {
+    candies = Number(window.PetBridge.getCandies() || 0);
+  } else {
+    try { candies = parseInt(localStorage.getItem('petCandies'), 10) || 0; } catch (e) { /* ignore */ }
+  }
+}
+function spendCandies(n) {
+  if (isNative && window.PetBridge) return !!window.PetBridge.consumeCandy(n);
+  if (candies >= n) {
+    candies -= n;
+    try { localStorage.setItem('petCandies', String(candies)); } catch (e) { /* ignore */ }
+    return true;
+  }
+  return false;
+}
+/* 旧版 H5 本地糖果一次性并入原生账本 */
+try {
+  if (isNative && !localStorage.getItem('candiesImported')) {
+    const old = parseInt(localStorage.getItem('petCandies'), 10) || 0;
+    if (old > 0 && window.PetBridge) window.PetBridge.addCandy(old);
+    localStorage.setItem('candiesImported', '1');
+    try { localStorage.removeItem('petCandies'); } catch (e) { /* ignore */ }
+  }
+} catch (e) { /* ignore */ }
 
-function saveWallet() {
-  try {
-    localStorage.setItem('petCandies', String(candies));
-    localStorage.setItem('petStepsSpent', String(stepsSpent));
-  } catch (e) { /* ignore */ }
-}
-function loadLevels() {
-  try { return JSON.parse(localStorage.getItem('petLevels') || '{}'); } catch (e) { return {}; }
-}
-function saveLevels(m) {
-  try { localStorage.setItem('petLevels', JSON.stringify(m)); } catch (e) { /* ignore */ }
-}
-function getLevel(dex) {
-  const m = loadLevels();
-  return m[dex] || 1;
-}
-function setLevel(dex, lv) {
-  const m = loadLevels();
-  m[dex] = lv;
-  saveLevels(m);
-}
-const stepsLeft = () => Math.max(0, totalSteps - stepsSpent);
-
-/* ─── 训练家账号（本地档案；微信登录待开放平台资质后接入） ─── */
+/* ─── 训练家账号（本地档案） ─── */
 let trainer = null;
 try { trainer = JSON.parse(localStorage.getItem('petTrainer') || 'null'); } catch (e) { trainer = null; }
 if (!trainer || !trainer.id) {
   const id = Math.floor(100000 + Math.random() * 900000);
-  trainer = {
-    id: id,
-    name: '训练家' + String(id).slice(0, 4),
-    createdAt: new Date().toISOString().slice(0, 10),
-  };
+  trainer = { id: id, name: '训练家' + String(id).slice(0, 4), createdAt: new Date().toISOString().slice(0, 10) };
   try { localStorage.setItem('petTrainer', JSON.stringify(trainer)); } catch (e) { /* ignore */ }
 }
 function saveTrainer() {
@@ -132,9 +131,10 @@ function updateTrainerUI() {
   todayStepsEl.textContent = todaySteps().toLocaleString();
 }
 
-/* ─── 每日步数（跨日自动结算：前一天计入累计，当日重新起算） ─── */
+/* ─── 每日步数（跨日自动结算） ─── */
 let dayKey = '';
 let dayBase = 0;
+let totalSteps = 0;
 try {
   dayKey = localStorage.getItem('petDayKey') || '';
   dayBase = parseInt(localStorage.getItem('petDayBase'), 10) || 0;
@@ -154,6 +154,31 @@ function todaySteps() {
   return Math.max(0, totalSteps - dayBase);
 }
 
+/* ─── 等级（本地存档） ─── */
+function loadLevels() {
+  try { return JSON.parse(localStorage.getItem('petLevels') || '{}'); } catch (e) { return {}; }
+}
+function saveLevels(m) {
+  try { localStorage.setItem('petLevels', JSON.stringify(m)); } catch (e) { /* ignore */ }
+}
+function getLevel(dex) {
+  const m = loadLevels();
+  return m[dex] || 1;
+}
+function setLevel(dex, lv) {
+  const m = loadLevels();
+  m[dex] = lv;
+  saveLevels(m);
+}
+function evoInfo(dex) {
+  const b = findBuddy(dex);
+  if (!b || !b.next) return null;
+  const nxt = findBuddy(b.next);
+  if (!nxt) return null;
+  const needLv = nxt.next ? EVO_LEVEL_STAGE1 : EVO_LEVEL_STAGE2;
+  return { next: nxt, needLv: needLv };
+}
+
 /* ─── 我的账号弹窗 ─── */
 function openTrainerModal() {
   tmName.value = trainer.name;
@@ -162,6 +187,8 @@ function openTrainerModal() {
   tmTotal.textContent = totalSteps.toLocaleString();
   tmToday.textContent = todaySteps().toLocaleString();
   tmCandy.textContent = String(candies);
+  const km = nativeMeters() / 1000;
+  tmDist.textContent = km >= 0.001 ? km.toFixed(2) + ' km' : '0.00 km';
   trainerModal.classList.remove('hidden');
 }
 function closeTrainerModal() {
@@ -185,38 +212,80 @@ wechatBtn.addEventListener('click', () => {
   wechatNote.classList.toggle('hidden');
 });
 
-/* ─── 步数刷新 ─── */
+/* ─── 运动（GPS 距离 → 糖果，原生前台服务） ─── */
+let exRunning = false;
+let exBaseMeters = 0;
+function nativeMeters() {
+  if (isNative && window.PetBridge && typeof window.PetBridge.getExerciseMeters === 'function') {
+    return Number(window.PetBridge.getExerciseMeters() || 0);
+  }
+  return 0;
+}
+function updateExerciseUI() {
+  if (!isNative) return;
+  const meters = nativeMeters();
+  const totalKm = (meters / 1000).toFixed(2);
+  exTotal.textContent = totalKm;
+  if (exRunning) {
+    const sess = Math.max(0, meters - exBaseMeters);
+    exSession.textContent = (sess / 1000).toFixed(2);
+  } else {
+    exSession.textContent = '—';
+  }
+  exBtn.textContent = exRunning ? '结束运动' : '开始运动';
+  exBtn.classList.toggle('running', exRunning);
+}
+function pollNative() {
+  if (!isNative) return;
+  if (window.PetBridge) {
+    exRunning = !!window.PetBridge.isExercising();
+    syncCandies();
+  }
+  updateExerciseUI();
+  updateResourceUI();
+  updateTrainerUI();
+  rollDay();
+}
+exBtn.addEventListener('click', () => {
+  if (!isNative || !window.PetBridge) return;
+  if (exRunning) {
+    window.PetBridge.endExercise();
+    exRunning = false;
+    setStatus('运动结束，糖果已结算', 'success');
+  } else {
+    exBaseMeters = nativeMeters();
+    window.PetBridge.startExercise();
+    setStatus('开始记录运动，锁屏也会继续~', 'success');
+  }
+  setTimeout(pollNative, 800);
+});
+
+/* ─── 步数（传感器，账号资料） ─── */
 function updateStepsUI() {
   if (!isNative) return;
   stepsBadge.classList.remove('hidden');
   stepsCount.textContent = totalSteps.toLocaleString();
 }
 function refreshSteps() {
-  rollDay();
   if (isNative && window.PetBridge && typeof window.PetBridge.getTotalSteps === 'function') {
     totalSteps = Number(window.PetBridge.getTotalSteps() || 0);
     updateStepsUI();
-    updateResourceUI();
     updateTrainerUI();
   }
 }
 window.__petSteps = function (n) {
   totalSteps = Number(n || 0);
   updateStepsUI();
-  updateResourceUI();
   updateTrainerUI();
+};
+window.__petExerciseDenied = function () {
+  setStatus('需要定位权限才能记录运动距离', 'warn');
 };
 
 /* ─── 资源/升级/进化 UI ─── */
 function updateResourceUI() {
   candyCount.textContent = String(candies);
   if (ccCandy) ccCandy.textContent = '🍬 ' + candies;
-  if (isNative) {
-    stepsLeftEl.textContent = stepsLeft().toLocaleString();
-  } else {
-    stepsLeftEl.textContent = '—';
-  }
-  exchangeBtn.disabled = !isNative || stepsLeft() < CANDY_RATE;
   if (currentBuddy) {
     const b = findBuddy(currentBuddy);
     if (b) {
@@ -233,38 +302,15 @@ function updateResourceUI() {
   }
 }
 
-function evoInfo(dex) {
-  const b = findBuddy(dex);
-  if (!b || !b.next) return null;
-  const nxt = findBuddy(b.next);
-  if (!nxt) return null;
-  const needLv = nxt.next ? EVO_LEVEL_STAGE1 : EVO_LEVEL_STAGE2;
-  return { next: nxt, needLv: needLv };
-}
-
-exchangeBtn.addEventListener('click', () => {
-  if (!isNative) return;
-  if (stepsLeft() < CANDY_RATE) {
-    setStatus('步数不足，先走走再回来~', 'warn');
-    return;
-  }
-  stepsSpent += CANDY_RATE;
-  candies += 1;
-  saveWallet();
-  updateResourceUI();
-  updateTrainerUI();
-  setStatus('获得 1 颗神奇糖果！', 'success');
-});
-
 levelupBtn.addEventListener('click', () => {
   if (!currentBuddy) return;
-  if (candies < LEVEL_COST) {
-    setStatus('糖果不足，先用步数兑换（' + CANDY_RATE + '步/颗）', 'warn');
+  syncCandies();
+  if (!spendCandies(LEVEL_COST)) {
+    setStatus('糖果不足，去运动攒糖果吧（1km=1🍬）', 'warn');
     return;
   }
-  candies -= LEVEL_COST;
   setLevel(currentBuddy, getLevel(currentBuddy) + 1);
-  saveWallet();
+  syncCandies();
   updateResourceUI();
   setStatus('升级成功！' + findBuddy(currentBuddy).name + ' Lv.' + getLevel(currentBuddy), 'success');
 });
@@ -275,13 +321,14 @@ evolveBtn.addEventListener('click', () => {
   const evo = evoInfo(currentBuddy);
   if (!b || !evo) return;
   const lv = getLevel(b.dex);
-  if (lv < evo.needLv || candies < EVOLVE_COST) {
+  syncCandies();
+  if (lv < evo.needLv || !spendCandies(EVOLVE_COST)) {
     setStatus('进化条件不足（Lv.' + evo.needLv + ' + ' + EVOLVE_COST + '🍬）', 'warn');
     return;
   }
-  candies -= EVOLVE_COST;
   setLevel(evo.next.dex, Math.max(getLevel(evo.next.dex), lv));
-  saveWallet();
+  syncCandies();
+  updateResourceUI();
   setStatus('进化成功！' + b.name + ' → ' + evo.next.name + '！', 'success');
   summon(evo.next.dex);
 });
@@ -329,6 +376,28 @@ function preview(b) {
   stagePet.appear();
 }
 
+/* ─── 悬浮窗窗口尺寸（物理 px，一次性传给原生；不再反馈式改尺寸） ─── */
+function clampNum(v, a, b) {
+  return Math.min(b, Math.max(a, v));
+}
+function overlayDims(b) {
+  const s = scale;
+  const CH = 150 * s; // 期望宠物内容高（css px）
+  const cssH = clampNum(CH * 1.34, 100, 620);
+  const cssW = clampNum(CH * 1.34 * (b.w / b.h), 80, 660);
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const winW = Math.round(cssW * dpr);
+  const winH = Math.round(cssH * dpr);
+  // 初始命中区：整窗内缩 10%（悬浮页加载后会 setPetRect 精确校正）
+  const padX = Math.max(6, Math.round(cssW * 0.1 * dpr));
+  const padY = Math.max(6, Math.round(cssH * 0.1 * dpr));
+  return {
+    winW: winW, winH: winH,
+    petL: padX, petT: padY,
+    petW: winW - padX * 2, petH: winH - padY * 2,
+  };
+}
+
 /* ─── 召唤 ─── */
 function summon(id) {
   const b = findBuddy(id);
@@ -336,10 +405,12 @@ function summon(id) {
   currentBuddy = b.dex;
   preview(b);
   showControl(b);
+  syncCandies();
   updateResourceUI();
   setStatus('已召唤 ' + b.name, 'success');
   if (isNative && window.PetBridge) {
-    window.PetBridge.summon(String(b.dex));
+    const d = overlayDims(b);
+    window.PetBridge.summon(String(b.dex), d.winW, d.winH, d.petL, d.petT, d.petW, d.petH);
   }
 }
 
@@ -376,101 +447,29 @@ window.__petNfc = function (id) {
   summon(b.dex);
 };
 
-/* ─── 悬浮窗模式（App 的浮窗 WebView） ─── */
-
-/** 把宠物完整帧格的范围告诉原生 → 原生把窗口贴合宠物（留足余量，任意缩放都不裁剪） */
-function reportPetBounds() {
-  if (!isOverlay || !window.PetBridge) return;
-  const box = pet.getFrameBox();
-  if (!box) return;
-  const R = pet.R;
-  const padX = Math.max(box.w * 0.22, R * 0.4); // 宽裕的水平余量
-  const padY = Math.max(box.h * 0.18, R * 0.5); // 垂直余量（动画浮动/头顶）
-  const left = pet.cx - box.w / 2 - padX;
-  const top = pet.cy - box.h - padY;
-  const w = box.w + padX * 2;
-  const h = box.h + padY + R * 0.55;
-  window.PetBridge.setPetBounds(Math.round(left), Math.round(top), Math.round(w), Math.round(h));
-}
-
-/** 触摸点是否在宝可梦本体上（决定拖拽/长按是否生效） */
-function pointOnPet(x, y) {
-  const s = pet.getDisplaySize();
-  if (!s) return false;
-  const left = pet.cx - s.w / 2;
-  const top = pet.cy - s.h;
-  return x >= left && x <= left + s.w && y >= top && y <= top + s.h;
-}
-
-/* 长按 2 秒收起（白色顺时针进度圈） */
-const LONG_PRESS_MS = 2000;
-let pressState = null; // { t0, x, y, on }
-
-function drawPressRing() {
-  if (!isOverlay || !pressState || !pressState.on || !pet.image) return;
-  const el = performance.now() - pressState.t0;
-  if (el >= LONG_PRESS_MS) {
-    pressState = null;
-    if (window.PetBridge) window.PetBridge.dismiss();
-    return;
-  }
-  const s = pet.getDisplaySize();
-  if (!s) return;
-  const ctx = pet.ctx;
-  const cyMid = pet.cy - s.h / 2;
-  const rad = Math.max(s.w, s.h) * 0.55 + pet.R * 0.1;
-  const prog = Math.min(1, el / LONG_PRESS_MS);
-  ctx.save();
-  ctx.setTransform(pet.dpr, 0, 0, pet.dpr, 0, 0);
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-  ctx.lineWidth = Math.max(5, pet.R * 0.09);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  // 从正上方开始顺时针画圈
-  ctx.arc(pet.cx, cyMid, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog);
-  ctx.stroke();
-  ctx.restore();
-}
-
+/* ─── 悬浮窗模式：纯渲染；窗口尺寸/命中区由原生契约管理，触摸全在原生层 ─── */
 if (isOverlay) {
   document.body.classList.add('overlay-mode');
-  // 页面根元素也强制透明，避免任何“方框”感
   document.documentElement.style.background = 'transparent';
-  pet.fixedSize = true;
-  pet.size = 90;
-  pet.scaleFactor = scale;
   pet.resize();
-  pet.onImageReady = reportPetBounds;
-  window.addEventListener('resize', reportPetBounds);
+  const reportRect = () => {
+    if (!window.PetBridge) return;
+    const r = pet.getContentRectCss();
+    if (!r) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    window.PetBridge.setPetRect(
+      Math.round(r.l * dpr), Math.round(r.t * dpr),
+      Math.round(r.w * dpr), Math.round(r.h * dpr)
+    );
+  };
+  pet.onImageReady = reportRect;
+  window.addEventListener('resize', reportRect);
   const id = params.get('buddy') || '1';
   const b = findBuddy(id);
   if (b) {
     pet.setFrames('sprites/anim/' + b.dex + '.png', b);
     pet.appear();
   }
-  // 触摸：本体上按下 = 拖拽门控 + 长按进度；移动超过阈值取消长按（转为拖拽）
-  const setPetTouch = (on) => {
-    if (window.PetBridge) window.PetBridge.setTouchOnPet(!!on);
-  };
-  canvas.addEventListener('pointerdown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const on = pointOnPet(x, y);
-    setPetTouch(on);
-    pressState = on ? { t0: performance.now(), x: x, y: y, on: true } : null;
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    if (!pressState) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    if (Math.abs(x - pressState.x) > 10 || Math.abs(y - pressState.y) > 10) {
-      pressState = null; // 动了 = 拖拽，取消长按
-    }
-  });
-  canvas.addEventListener('pointerup', () => { pressState = null; setPetTouch(false); });
-  canvas.addEventListener('pointercancel', () => { pressState = null; setPetTouch(false); });
 }
 
 /* ─── 初始界面 / NFC ─── */
@@ -478,6 +477,7 @@ if (!isOverlay) {
   renderGrid();
   applyScaleUI();
   updateTrainerUI();
+  syncCandies();
   updateResourceUI();
   const first = BUDDIES['1'];
   if (first) preview(first); // 平台默认展示 1 号
@@ -488,10 +488,13 @@ if (!isOverlay) {
     closeAppBtn.addEventListener('click', () => {
       if (window.PetBridge) window.PetBridge.exit();
     });
+    exerciseCard.classList.remove('hidden');
   }
 
   refreshSteps();
+  pollNative();
   setInterval(refreshSteps, 5000);
+  setInterval(pollNative, 2500);
 
   const nfc = new NFCManager({
     onAwaken: (id) => window.__petNfc(id),
@@ -524,7 +527,6 @@ function frame(now) {
   last = now;
   pet.tick(dt);
   pet.draw();
-  if (isOverlay) drawPressRing();
   stagePet.tick(dt);
   stagePet.draw();
   requestAnimationFrame(frame);

@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -34,6 +40,12 @@
             </intent-filter>
 
         </activity>
+
+        <!-- 运动记录前台服务（GPS 累计距离，每 1km +1 糖果） -->
+        <service
+            android:name=".ExerciseService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
 </manifest>

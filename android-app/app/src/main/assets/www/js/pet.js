@@ -52,6 +52,7 @@ export class Pet {
     this.scaleFactor = 1; // 用户缩放（初始界面滑块调节，持久保存）
     this.groundAt = opts.groundAt || 0.5; // 脚底在画布高度的比例（0.5 = 居中）
     this.fitAboveGround = !!opts.fitAboveGround; // 缩放时限制不超出画布
+    this.contain = !!opts.contain; // 悬浮窗自适应：按窗口等比缩放，永不出界
     this.groundY = 0; // 脚底位置（resize 时算）
     this.maxHeight = Infinity; // 最大显示高度（px）
 
@@ -72,6 +73,11 @@ export class Pet {
     this.R = this.fixedSize ? this.size : Math.min(this.w, this.h) * 0.26;
     this.groundY = this.h * this.groundAt;
     this.maxHeight = this.fitAboveGround ? Math.max(30, this.groundY - 4) : Infinity;
+    if (this.contain) {
+      // 自适应模式：R 仅用于动画幅度，不再参与尺寸计算
+      this.R = Math.max(12, Math.min(this.w, this.h) * 0.18);
+      this.maxHeight = Infinity;
+    }
   }
 
   /** 更换宠物图片；pixelated = true 时用最近邻缩放（像素素材保持锐利） */
@@ -247,10 +253,10 @@ export class Pet {
     const R = this.R;
     const petY = this.groundY + p.bob * R;
 
-    // 宠物本体（锚点在脚底）
+    // 宠物本体（锚点在脚底；自适应模式直接用 css px 绘制）
     ctx.save();
     ctx.translate(this.cx, petY);
-    ctx.scale(R * p.scale, R * p.scale);
+    ctx.scale(this.contain ? p.scale : R * p.scale, this.contain ? p.scale : R * p.scale);
     ctx.rotate(p.rot);
     this._drawImage(ctx, p);
     ctx.restore();
@@ -266,11 +272,27 @@ export class Pet {
 
   _drawImage(ctx, p) {
     const cb = this.contentBox;
-    // 限制最大高度，保证缩放后不出画布
-    const targetH = Math.min(1.6 * (1 + p.breath) * this.scaleFactor, this.maxHeight / this.R);
-    const scale = targetH / cb.h;
     // 像素素材用最近邻（锐利），高清素材用平滑
     ctx.imageSmoothingEnabled = !this.pixelated;
+    if (this.contain) {
+      // 自适应：帧格等比缩放到窗口内（92%×82%），内容一定在帧格内 → 永不裁剪
+      const fw = this.mode === 'frames' ? this.frameW : cb.w;
+      const fh = this.mode === 'frames' ? this.frameH : cb.h;
+      const fit = this._fitScale();
+      const dw = fw * fit * (1 + p.breath);
+      const dh = fh * fit * (1 + p.breath);
+      if (this.mode === 'frames') {
+        const sx = Math.round(this.frame * this.frameW);
+        ctx.drawImage(this.image, sx, 0, Math.round(this.frameW), Math.round(this.frameH), -dw / 2, -dh, dw, dh);
+      } else {
+        ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -dh, dw, dh);
+      }
+      ctx.imageSmoothingEnabled = true;
+      return;
+    }
+    // 常规模式：限制最大高度，保证缩放后不出画布
+    const targetH = Math.min(1.6 * (1 + p.breath) * this.scaleFactor, this.maxHeight / this.R);
+    const scale = targetH / cb.h;
     if (this.mode === 'frames') {
       const sx = Math.round(this.frame * this.frameW);
       const fw = Math.round(this.frameW);
@@ -285,6 +307,25 @@ export class Pet {
       ctx.drawImage(this.image, cb.x, cb.y, cb.w, cb.h, -dw / 2, -dh, dw, dh);
     }
     ctx.imageSmoothingEnabled = true;
+  }
+
+  /** 自适应模式的缩放系数（帧格最大占窗口 92% × 82%） */
+  _fitScale() {
+    const cb = this.contentBox;
+    if (!cb) return 1;
+    const fw = this.mode === 'frames' ? this.frameW : cb.w;
+    const fh = this.mode === 'frames' ? this.frameH : cb.h;
+    return Math.min((this.w * 0.92) / fw, (this.h * 0.82) / fh);
+  }
+
+  /** 悬浮窗内容（不透明像素并集）在窗口内的 css px 矩形（原生长按命中用） */
+  getContentRectCss() {
+    const cb = this.contentBox;
+    if (!cb || !this.contain) return null;
+    const fit = this._fitScale();
+    const w = cb.w * fit;
+    const h = cb.h * fit;
+    return { l: this.cx - w / 2, t: this.groundY - h, w: w, h: h };
   }
 
   /** 宠物内容显示尺寸（px） */

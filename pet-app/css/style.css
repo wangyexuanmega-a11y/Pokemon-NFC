@@ -590,3 +590,50 @@ body.overlay-mode #trainer-modal {
 
 /* ─── 通用 ─── */
 .hidden { display: none !important; }
+
+/* ─── 运动记录卡片 ─── */
+#exercise-card {
+  width: min(88vw, 340px);
+  margin: 0 auto 14px;
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1);
+  text-align: left;
+}
+.ex-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.ex-note {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.ex-rows {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.ex-rows .res-item b { color: var(--green); }
+#ex-btn {
+  width: 100%;
+  padding: 9px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0,212,255,.16);
+  color: var(--cyan);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#ex-btn:active { opacity: .8; }
+#ex-btn.running {
+  background: rgba(255,123,114,.16);
+  color: #ff7b72;
+}

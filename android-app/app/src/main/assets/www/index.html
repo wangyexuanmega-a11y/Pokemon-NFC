@@ -49,15 +49,27 @@
       <span class="scale-value" id="scale-value">100%</span>
     </div>
 
-    <!-- 步数 → 神奇糖果 -->
+    <!-- 神奇糖果 -->
     <div id="resource-row">
       <span class="res-item res-candy"><img src="sprites/item/rare-candy.png" class="res-ico" alt="糖果"> <b id="candy-count">0</b></span>
-      <span class="res-item">剩余步数 <b id="steps-left">0</b></span>
-      <button id="exchange-btn" type="button">换糖果</button>
+      <span class="res-item">每走 1 公里 = 1 颗🍬</span>
+    </div>
+
+    <!-- 运动记录（GPS 距离） -->
+    <div id="exercise-card" class="hidden">
+      <div class="ex-head">
+        <span>🏃 运动记录</span>
+        <span class="ex-note">GPS 定位 · 锁屏继续</span>
+      </div>
+      <div class="ex-rows">
+        <span class="res-item">本次 <b id="ex-session">—</b> km</span>
+        <span class="res-item">累计 <b id="ex-total">0.00</b> km</span>
+      </div>
+      <button id="ex-btn" type="button">开始运动</button>
     </div>
 
     <div id="buddy-grid"></div>
-    <p class="ss-hint">选择后宠物会出现在桌面上（悬浮窗，可拖拽）<br>碰一下 NFC 手环也能直接唤醒<br>走路攒步数 → 兑换神奇糖果 → 升级进化！<br>长按悬浮宠物 2 秒可收起</p>
+    <p class="ss-hint">选择后宠物会出现在桌面上（可拖拽，长按 2 秒收起）<br>碰一下 NFC 手环也能直接唤醒<br>运动攒糖果 → 升级进化！</p>
   </div>
 
   <!-- 控制卡片 -->
@@ -86,12 +98,13 @@
       <div class="tm-row"><span class="tm-label">注册日期</span><span class="tm-val" id="tm-date">—</span></div>
       <div class="tm-row"><span class="tm-label">累计步数</span><span class="tm-val" id="tm-total">0</span></div>
       <div class="tm-row"><span class="tm-label">今日步数</span><span class="tm-val" id="tm-today">0</span></div>
+      <div class="tm-row"><span class="tm-label">运动累计</span><span class="tm-val" id="tm-dist">0.00 km</span></div>
       <div class="tm-row"><span class="tm-label">神奇糖果</span><span class="tm-val" id="tm-candy">0</span></div>
       <button id="tm-save" type="button">保存</button>
       <button id="wechat-btn" type="button">绑定微信（同步微信步数）</button>
       <p class="tm-note hidden" id="wechat-note">
         微信未向第三方 App 开放「微信运动」读取接口，普通安卓 App 也无法直接微信登录（需微信开放平台企业应用认证）。<br>
-        当前步数来自<b>手机硬件计步传感器</b>（与微信运动同源）。待你取得微信开放平台资质后，即可在此接入真正的微信登录与微信步数同步。
+        当前糖果通过 <b>GPS 运动距离</b>获得（每 1 公里自动 +1 颗）。待你取得微信开放平台资质后，即可接入真正的微信登录与微信步数同步。
       </p>
     </div>
   </div>
